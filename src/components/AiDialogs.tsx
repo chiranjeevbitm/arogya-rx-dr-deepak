@@ -39,7 +39,7 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
   }
   if (!draft) return <Modal title="Speak the consult" width={640} onClose={() => { stop(); onClose() }} footer={<>
     <span className="grow small muted">Medicines are matched to the list. You review everything before it goes on the parchi.</span>
-    <button className="btn primary" disabled={busy || text.trim().length < 5} onClick={make}>{busy ? 'Making draft…' : 'Make draft'}</button>
+    <button className="btn primary" disabled={busy || text.trim().length < 5} onClick={make}>{busy ? 'Making draft… up to 30 s' : 'Make draft'}</button>
   </>}>
     <div className="stack">
       <div className="row wrap">
@@ -116,7 +116,7 @@ export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string;
     <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && go(e.target.files[0])} />
     {!scan && <div className="stack" style={{ alignItems: 'center', padding: '20px 0' }}>
       {preview && <img src={preview} alt="" style={{ maxHeight: 240, borderRadius: 8 }} />}
-      <button className="btn primary lg" disabled={busy} onClick={() => file.current?.click()}><Icon n="cam" />{busy ? 'Reading the document…' : 'Take or choose a photo'}</button>
+      <button className="btn primary lg" disabled={busy} onClick={() => file.current?.click()}><Icon n="cam" />{busy ? 'Reading the document… up to 30 s' : 'Take or choose a photo'}</button>
       <p className="small muted" style={{ textAlign: 'center', maxWidth: 420 }}>Lay the page flat in good light. Handwriting is read where legible; nothing is saved until you confirm.</p>
     </div>}
     {scan && <div className="grid2" style={{ alignItems: 'start' }}>
