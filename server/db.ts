@@ -10,7 +10,7 @@ function usePooler(raw: string): string {
     const u = new URL(raw)
     const m = /^db\.([a-z0-9]+)\.supabase\.co$/.exec(u.hostname)
     if (!m) return raw
-    u.hostname = process.env.DB_POOLER_HOST || 'aws-0-ap-south-1.pooler.supabase.com'
+    u.hostname = process.env.DB_POOLER_HOST || 'aws-1-ap-south-1.pooler.supabase.com'
     u.port = '6543'
     if (!u.username.includes('.')) u.username = `${u.username}.${m[1]}`
     return u.toString()
