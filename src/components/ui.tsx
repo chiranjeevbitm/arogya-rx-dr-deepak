@@ -16,13 +16,15 @@ export function ToastHost({ children }: { children: ReactNode }) {
 
 export function Modal({ title, onClose, children, footer, width }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose); close.current = onClose   // parents pass a new onClose on every render: keep it out of the effect deps
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
     document.addEventListener('keydown', k)
+    // focus the first field once, when the dialog opens (not on every keystroke)
     const first = ref.current?.querySelector<HTMLElement>('input, select, textarea, button:not(.icon-btn)')
     first?.focus()
     return () => document.removeEventListener('keydown', k)
-  }, [onClose])
+  }, [])
   return <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
     <div ref={ref} className="sheet" role="dialog" aria-modal="true" style={{ ['--w' as any]: (width || 560) + 'px' }}>
       <div className="sheet-h"><h2 className="grow">{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon n="x" /></button></div>
