@@ -1,0 +1,49 @@
+{
+  "name": "arogya-rx-dr-deepak",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Arogya Rx for Dr. Deepak Kumar, Arogya Clinic, Muzaffarpur",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"tsx watch server/local.ts\" \"vite\"",
+    "build": "tsc -b && vite build",
+    "start": "tsx server/local.ts",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "seed:build": "python3 scripts/build_seed.py"
+  },
+  "dependencies": {
+    "@fontsource/hind": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/kalam": "5.3.0",
+    "@fontsource/martel": "5.3.0",
+    "@hono/node-server": "2.1.5",
+    "@tanstack/react-query": "5.105.0",
+    "hono": "4.13.16",
+    "html-to-image": "1.11.13",
+    "jose": "6.2.14",
+    "jspdf": "4.2.1",
+    "postgres": "4.0.0",
+    "qrcode": "1.5.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vercel/node": "29.0.1",
+    "@vitejs/plugin-react": "6.1.2",
+    "concurrently": "10.0.6",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

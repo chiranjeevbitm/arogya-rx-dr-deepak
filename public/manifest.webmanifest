@@ -1,0 +1,2 @@
+{ "name": "Arogya Rx · Arogya Clinic", "short_name": "Arogya Rx", "start_url": "/", "display": "standalone", "background_color": "#EEF0F6", "theme_color": "#1626B8",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }] }

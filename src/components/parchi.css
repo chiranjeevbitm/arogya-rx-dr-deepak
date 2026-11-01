@@ -1,0 +1,44 @@
+/* Arogya Rx parchi — the demo's format: letterhead with ink rule, patient row, findings left, ℞ right.
+   Sized in mm: A5 (148 × 210) by default, A4 optional. Font size scales the whole page. */
+.parchi { --lh: #1d3a8a; --pi: #1A1F2B; --pm: #5D6372; --pl: #D8DCE5; width: var(--pw, 148mm); min-height: var(--ph, 210mm); background: #fff; color: var(--pi); font-family: 'Hind', 'Noto Sans Devanagari', sans-serif; font-size: var(--fs, 3.05mm); line-height: 1.42; padding: 6mm 6.5mm 4.5mm; display: flex; flex-direction: column; gap: 2.2mm; position: relative; overflow: hidden; box-sizing: border-box }
+.parchi * { box-sizing: border-box }
+.parchi.a4 { --pw: 210mm; --ph: 297mm; --fs: 3.7mm; padding: 9mm 10mm 7mm; gap: 3mm }
+.parchi .wm { position: absolute; left: -20%; right: -20%; top: 46%; transform: rotate(-24deg); text-align: center; font: 800 2.4em 'Martel', serif; color: var(--pi); opacity: .06; white-space: nowrap; pointer-events: none; letter-spacing: .04em }
+.lh { border-bottom: .55mm solid var(--lh); padding-bottom: 1.8mm; box-shadow: 0 .8mm 0 -.55mm var(--lh) }
+.lh.center { text-align: center }
+.lh.left { display: grid; grid-template-columns: auto 1fr; gap: 3.5mm; align-items: center }
+.lh-logo { width: 14mm; height: 14mm; border-radius: 50%; border: .5mm solid var(--lh); color: var(--lh); display: grid; place-items: center; font: 900 6.5mm 'Martel', serif; overflow: hidden }
+.lh-logo img { width: 100%; height: 100%; object-fit: contain }
+.lh-names { display: flex; align-items: baseline; gap: 2mm; flex-wrap: wrap }
+.lh.center .lh-names { justify-content: center }
+.lh-hi { font: 900 2.05em/1.05 'Martel', serif; color: var(--lh) }
+.lh-en { font: 700 1.05em 'Martel', serif; letter-spacing: .14em; text-transform: uppercase; color: var(--lh) }
+.lh-doc { font-weight: 700; font-size: 1.25em; margin-top: .5mm }
+.lh-doc .hi { font-weight: 500 }
+.lh-deg, .lh-contact { font-size: .92em; color: var(--pm) }
+.prow { display: grid; grid-template-columns: 1.7fr 1fr 1.3fr; gap: 1mm 3mm; font-size: .98em }
+.prow div { border-bottom: .25mm dotted var(--pl); padding-bottom: .2mm; min-width: 0; overflow-wrap: anywhere }
+.prow span { color: var(--pm); font-size: .9em; margin-right: 1mm }
+.pbody { display: grid; grid-template-columns: 34% 1fr; gap: 3mm; flex: 1 }
+.pleft { border-right: .25mm solid var(--pl); padding-right: 2.5mm; display: flex; flex-direction: column; gap: 1.8mm; min-width: 0 }
+.pleft h5, .pright h5 { margin: 0; font-size: .82em; letter-spacing: .1em; text-transform: uppercase; color: var(--lh); font-weight: 700 }
+.pleft p { margin: 0; font-size: .95em; white-space: pre-wrap }
+.pv { display: grid; grid-template-columns: auto 1fr; gap: 0 1.5mm; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .88em }
+.pv .hi { font-weight: 600; text-decoration: underline wavy #B2261E }
+.pright { display: flex; flex-direction: column; gap: 2mm; min-width: 0 }
+.rxs { font: 900 2.2em/1 'Martel', serif; color: var(--lh) }
+.pmeds { margin: 0; padding: 0 0 0 1.3em; display: flex; flex-direction: column; gap: 1.6mm }
+.m-en b { letter-spacing: .01em }
+.m-en small { color: var(--pm) }
+.m-sig { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .88em }
+.m-hi { color: var(--lh); font-weight: 500 }
+.padv { font-size: .95em }
+.padv .hi { color: var(--lh) }
+.pfu { display: flex; justify-content: space-between; align-items: end; gap: 2mm; margin-top: auto }
+.pfu .fu { font-weight: 600 }
+.sign { text-align: center; min-width: 42% }
+.sign img { height: 10mm; width: auto; display: block; margin: 0 auto }
+.sign .s { font: 700 1.9em/1 'Kalam', cursive; color: var(--lh) }
+.sign .l { border-top: .25mm solid var(--pi); padding-top: .5mm; font-size: .85em }
+.pfoot { border-top: .25mm solid var(--pl); padding-top: 1mm; font-size: .78em; color: var(--pm); display: flex; justify-content: space-between; gap: 2mm; flex-wrap: wrap }
+.parchi-zoom { transform-origin: top left }
