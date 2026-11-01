@@ -252,10 +252,10 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 /* ---------- print ---------- */
 @media print {
   @page { margin: 0 }
-  body { background: #fff }
-  body * { visibility: hidden }
-  .print-root, .print-root * { visibility: visible }
-  .print-root { position: absolute !important; inset: 0 auto auto 0 !important; z-index: 1 !important }
+  html.printing, html.printing body { background: #fff !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important }
+  html.printing body > *:not(#print-sheet) { display: none !important }
+  html.printing #print-sheet { display: block; position: static; overflow: hidden; break-after: avoid; page-break-after: avoid }
+  html.printing #print-sheet .parchi { break-inside: avoid; page-break-inside: avoid }
   .no-print { display: none !important }
 }
 
@@ -275,11 +275,12 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .bub .pdf { display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,.05); border-radius: 6px; padding: 6px }
 .bub .pdf .ic { width: 34px; height: 40px; background: #E5484D; color: #fff; display: grid; place-items: center; border-radius: 4px; font-size: 10px; font-weight: 700 }
 .wa-meds { margin: 6px 0 0; padding-left: 18px }
-.opd { display: grid; grid-template-columns: 236px minmax(0, 1fr) minmax(340px, 420px); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; min-height: calc(100vh - 140px) }
+.opd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; min-height: calc(100vh - 140px) }
 .opd > * { min-width: 0 }
-.queue { border-right: 1px solid var(--line); background: var(--desk); padding: 12px; display: flex; flex-direction: column; gap: 8px }
-.queue h3 { font-size: 13px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between }
-.q-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 9px; align-items: center; padding: 8px; border-radius: 10px; border: 1px solid transparent; background: var(--paper); cursor: pointer; text-align: left; width: 100%; color: inherit; text-decoration: none }
+.queue { grid-column: 1 / -1; border-bottom: 1px solid var(--line); background: var(--desk); padding: 8px 12px; display: flex; flex-direction: row; align-items: center; gap: 8px; overflow-x: auto }
+.queue h3 { font-size: 13px; color: var(--muted); font-weight: 600; display: flex; gap: 8px; flex: none; margin: 0 4px 0 0 }
+.queue > p { margin: 0 }
+.q-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 9px; align-items: center; padding: 8px; flex: none; min-width: 190px; max-width: 250px; border-radius: 10px; border: 1px solid transparent; background: var(--paper); cursor: pointer; text-align: left; width: auto; color: inherit; text-decoration: none }
 .q-item:hover { border-color: var(--line-2) }
 .q-item.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset }
 .q-item.done { opacity: .62 }
@@ -315,8 +316,8 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .cost .save b { color: var(--neem) }
 .opd-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; position: sticky; bottom: 0; background: var(--paper) }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px }
-@media (max-width: 1280px) { .opd { grid-template-columns: 210px minmax(0, 1fr) } .opd-side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line) } }
-@media (max-width: 900px) { .opd { grid-template-columns: 1fr } .queue { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; overflow-x: auto } .queue h3 { display: none } .q-item { min-width: 190px } .tools, .two { grid-template-columns: 1fr } }
+@media (max-width: 1280px) { .opd { grid-template-columns: minmax(0, 1fr) } .opd-side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line) } }
+@media (max-width: 900px) { .opd { grid-template-columns: 1fr } .tools, .two { grid-template-columns: 1fr } }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px }
 .kpi { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
 .kpi span { font-size: 12.5px; color: var(--muted); font-weight: 600 }

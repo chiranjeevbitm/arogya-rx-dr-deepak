@@ -13,15 +13,30 @@ export const PrintArea = forwardRef<HTMLDivElement, React.ComponentProps<typeof 
   return createPortal(<div className="print-root rx-print" style={{ position: 'fixed', left: -10000, top: 0, zIndex: -1 }} aria-hidden="true"><div ref={ref}><Parchi {...props} /></div></div>, document.body)
 })
 
-/** Prints only one kind of print root, at the right page size. */
-export function printOnly(kind: 'rx' | 'receipt', size: string) {
+/** Prints one document on its own: a clean copy of the page is put in an isolated sheet and everything else is
+    removed from the layout while printing, so the browser never adds blank pages for the hidden app behind it. */
+const PAGE_H: Record<string, string> = { A5: '209.4mm', A4: '296.4mm' }
+export async function printOnly(kind: 'rx' | 'receipt', size: string) {
+  const src = document.querySelector<HTMLElement>(`.print-root.${kind}-print`)
+  if (!src) return window.print()
+  const sheet = document.createElement('div')
+  sheet.id = 'print-sheet'
+  const copy = src.cloneNode(true) as HTMLElement
+  copy.removeAttribute('style'); copy.removeAttribute('aria-hidden')
+  const live = src.querySelectorAll('canvas'), cl = copy.querySelectorAll('canvas')
+  cl.forEach((c, i) => { const img = document.createElement('img'); try { img.src = (live[i] as HTMLCanvasElement).toDataURL() } catch { /* tainted canvas: skip */ } img.width = (live[i] as HTMLCanvasElement).width; img.height = (live[i] as HTMLCanvasElement).height; img.hidden = c.hidden; c.replaceWith(img) })
+  sheet.appendChild(copy)
+  if (kind === 'rx' && PAGE_H[size]) sheet.style.height = PAGE_H[size]
+  document.body.appendChild(sheet)
   const st = document.createElement('style')
-  st.textContent = `@page { size: ${size}; margin: 0 } @media print { .print-root:not(.${kind}-print) { display: none !important } }`
+  st.textContent = `@page { size: ${size}; margin: 0 }`
   document.head.appendChild(st)
-  const done = () => { st.remove(); window.removeEventListener('afterprint', done) }
+  document.documentElement.classList.add('printing')
+  const done = () => { sheet.remove(); st.remove(); document.documentElement.classList.remove('printing'); window.removeEventListener('afterprint', done) }
   window.addEventListener('afterprint', done)
+  await Promise.all([...sheet.querySelectorAll('img')].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = () => r(null) })))
   window.print()
-  setTimeout(done, 60000)
+  setTimeout(done, 120000)
 }
 
 export function useRxOutput(rxId: string, page: React.RefObject<HTMLDivElement | null>, hasPdf: boolean) {
