@@ -347,3 +347,15 @@ export function normPhone(p?: string | null): string {
   if (d.length === 11 && d.startsWith('0')) return d.slice(1)
   return d
 }
+
+
+/** A parchi stays valid for 21 days: a follow-up in this time needs no new consultation. */
+export const PARCHI_VALID_DAYS = 21
+export function parchiValidity(lastRxDate: string | null | undefined, today: string): { till: string; daysLeft: number; ago: number } | null {
+  if (!lastRxDate) return null
+  const d = (s: string) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10))
+  const ago = Math.round((d(today) - d(lastRxDate.slice(0, 10))) / 86400000)
+  if (ago < 0 || ago > PARCHI_VALID_DAYS) return null
+  const till = new Date(d(lastRxDate.slice(0, 10)) + PARCHI_VALID_DAYS * 86400000).toISOString().slice(0, 10)
+  return { till, daysLeft: PARCHI_VALID_DAYS - ago, ago }
+}

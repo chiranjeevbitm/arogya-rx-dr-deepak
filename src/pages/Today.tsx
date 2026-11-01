@@ -8,9 +8,9 @@ import { PatientPicker, type Patient, type NewPatient } from '../components/Pati
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 import Icon from '../components/Icon'
-import { vitalFlag, type Vitals } from '../../shared/rx'
+import { vitalFlag, parchiValidity, type Vitals } from '../../shared/rx'
 
-type Visit = { id: string; token: number; status: string; visit_type: string; complaint: string | null; patient_id: string; name: string; uhid: string; sex: string | null; age_years: number | null; phone: string | null; allergies: string[]; vitals: Vitals; rx_id: string | null; rx_status: string | null; bill_id: string | null; bill_paid: number | null; bill_mode: string | null; source: string }
+type Visit = { last_rx_date?: string | null; id: string; token: number; status: string; visit_type: string; complaint: string | null; patient_id: string; name: string; uhid: string; sex: string | null; age_years: number | null; phone: string | null; allergies: string[]; vitals: Vitals; rx_id: string | null; rx_status: string | null; bill_id: string | null; bill_paid: number | null; bill_mode: string | null; source: string }
 type Appt = { id: string; name: string; phone: string; time: string | null; status: string; reason: string | null; source: string }
 
 export default function Today() {
@@ -74,7 +74,7 @@ export default function Today() {
             return <div key={v.id} className={'qrow' + (v.status === 'done' || v.status === 'cancelled' ? ' done' : '')}>
               <span className={'tok ' + (v.status === 'with_doctor' ? 'with' : v.status === 'done' ? 'done' : '')}>{v.token}</span>
               <button className="who grow" style={{ background: 'none', border: 0, textAlign: 'left', cursor: 'pointer', padding: 0, minWidth: 0 }} onClick={() => open(v)}>
-                <b className="ellipsis">{v.name}</b>
+                <b className="ellipsis">{v.name}</b>{v.status !== 'done' && parchiValidity(v.last_rx_date, istToday()) && <span className="tag valid" title={`Last parchi valid until ${parchiValidity(v.last_rx_date, istToday())!.till}`}>Parchi valid</span>}
                 <span>{ageSex(v)}{v.complaint ? `, ${v.complaint}` : ''}</span>
                 <span className="row wrap" style={{ marginTop: 3 }}>
                   {v.visit_type === 'follow_up' && <span className="tag ink">Follow-up</span>}

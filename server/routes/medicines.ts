@@ -15,7 +15,7 @@ r.get('/', async c => {
   const q = (c.req.query('q') || '').trim().toLowerCase()
   const cid = me(c).clinic_id
   if (q.length < 2) {
-    const used = await sql()`select name, defaults, uses from arx.med_usage where clinic_id = ${cid} order by uses desc, last_used desc limit 15`
+    const used = await sql()`select name, defaults, uses, pinned from arx.med_usage where clinic_id = ${cid} order by pinned desc, uses desc, last_used desc limit 15`
     if (used.length >= 5) return c.json(used)
     // new clinic: suggest common generics until the doctor's own favourites build up
     const starter = await sql()`select id, name, kind, category, manufacturer, pack, price::float as price, form from arx.medicines
@@ -53,6 +53,19 @@ r.get('/ja', async c => {
     ${mg ? sql()`and lower(name) ~ ${'(^|[^0-9.])' + mg[1].replace('.', '\\.') + '\\s*' + mg[2]}` : sql()``}
     order by length(name), price limit 1`
   return c.json(rows[0] || null)
+})
+
+/** Regular medicines: the doctor's own pinned list, shown first and as one-tap chips. */
+r.get('/regular', async c => c.json(await sql()`select name, defaults from arx.med_usage where clinic_id = ${me(c).clinic_id} and pinned order by lower(name)`))
+r.post('/regular', requireAuth('doctor', 'admin'), async c => {
+  const b = await body(c, z.object({ name: z.string().min(2).max(200), defaults: z.record(z.string(), z.any()).optional() }))
+  await sql()`insert into arx.med_usage (clinic_id, name, uses, defaults, pinned) values (${me(c).clinic_id}, ${b.name}, 0, ${sql().json((b.defaults || {}) as any)}, true)
+    on conflict (clinic_id, name) do update set pinned = true, defaults = case when ${b.defaults ? true : false} then excluded.defaults else arx.med_usage.defaults end`
+  return c.json({ ok: true })
+})
+r.delete('/regular', requireAuth('doctor', 'admin'), async c => {
+  await sql()`update arx.med_usage set pinned = false where clinic_id = ${me(c).clinic_id} and name = ${c.req.query('name') || ''}`
+  return c.json({ ok: true })
 })
 
 r.get('/custom', async c => c.json(await sql()`select name, form from arx.medicines where kind = 'custom' and clinic_id = ${me(c).clinic_id} order by name limit 2000`))

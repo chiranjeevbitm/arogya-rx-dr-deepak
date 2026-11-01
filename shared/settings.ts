@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: ClinicSettings = {
     validity_days: 21,
     signature_name: 'Dr. Deepak Kumar',
     signature_quals: 'MBBS (SKMCH), MD General Medicine (DMCH Darbhanga)',
-    ink: '#1d3a8a',
+    ink: '#16295f',
     accent: '#d0201b',
     logo_file_id: null,
     signature_file_id: null,
@@ -104,4 +104,8 @@ export const DEFAULT_TEMPLATES: { name: string; data: TemplateData }[] = [
   { name: 'Iron deficiency anaemia', data: { diagnosis: 'Iron deficiency anaemia', meds: [t('Ferrous Ascorbate + Folic Acid Tablet', 'TAB', '1', '0-1-0', 'after', 90), t('Cholecalciferol 60000 IU Sachet', 'SACHET', '1 sachet', 'Weekly', 'after', 56)], investigations: ['CBC', 'S. ferritin'], advice: [], follow_up_days: 30 } },
   { name: 'Hypothyroidism', data: { diagnosis: 'Hypothyroidism', meds: [t('Levothyroxine 50 mcg Tablet', 'TAB', '1', '1-0-0', 'empty', 60)], investigations: ['TSH'], advice: ['Do not stop medicines without asking the doctor'], follow_up_days: 60 } },
   { name: 'Typhoid (enteric fever)', data: { diagnosis: 'Enteric fever', meds: [t('Cefixime 200 mg Tablet', 'TAB', '1', '1-0-1', 'after', 14), t('Paracetamol 650 mg Tablet', 'TAB', '1', '1-1-1', 'after', 5)], investigations: ['CBC', 'Widal', 'Typhidot'], advice: ['Drink plenty of fluids', 'Take rest'], follow_up_days: 5 } },
+  { name: 'Diabetes: new case', data: { diagnosis: 'Type 2 diabetes mellitus (newly detected)', meds: [t('Metformin 500 mg Tablet', 'TAB', '1', '1-0-1', 'after', 30), t('Glimepiride 1 mg Tablet', 'TAB', '1', '1-0-0', 'before', 30)], investigations: ['FBS', 'PPBS', 'HbA1c', 'Lipid profile', 'S. creatinine', 'Urine R/M'], advice: ['Avoid sugar and sweets', 'Walk 30 minutes daily', 'Check sugar at home every week', 'Eye and foot check once a year'], follow_up_days: 14 } },
+  { name: 'Diabetes + hypertension', data: { diagnosis: 'Type 2 diabetes mellitus with hypertension', meds: [t('Metformin SR 500 mg Tablet', 'TAB', '1', '1-0-1', 'after', 30), t('Telmisartan 40 mg Tablet', 'TAB', '1', '1-0-0', '', 30), t('Atorvastatin 10 mg Tablet', 'TAB', '1', '0-0-1', 'after', 30)], investigations: ['FBS', 'PPBS', 'HbA1c', 'S. creatinine', 'Urine albumin'], advice: ['Low salt diet', 'Avoid sugar and sweets', 'Walk 30 minutes daily'], follow_up_days: 30 } },
+  { name: 'Hypertension: new case', data: { diagnosis: 'Essential hypertension (newly detected)', meds: [t('Amlodipine 5 mg Tablet', 'TAB', '1', '1-0-0', '', 30)], investigations: ['S. creatinine', 'S. electrolytes', 'Lipid profile', 'ECG', 'Urine R/M'], advice: ['Low salt diet', 'Walk 30 minutes daily', 'Check BP at home every week'], follow_up_days: 14 } },
 ]
+

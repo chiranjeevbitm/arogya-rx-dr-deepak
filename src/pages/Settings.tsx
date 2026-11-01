@@ -38,7 +38,7 @@ function useSettingsForm() {
 }
 const SaveBar = ({ dirty, save, busy }: { dirty: boolean; save: () => void; busy: boolean }) => dirty ? <div className="savebar"><span className="small muted grow">You have unsaved changes</span><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button></div> : null
 
-const INKS: [string, string][] = [['#1d3a8a', 'Ink blue'], ['#1626b8', 'Royal blue'], ['#7a1f2b', 'Maroon'], ['#1f5e46', 'Green'], ['#23262e', 'Black']]
+const INKS: [string, string][] = [['#16295f', 'Navy blue'], ['#1d3a8a', 'Ink blue'], ['#1626b8', 'Royal blue'], ['#7a1f2b', 'Maroon'], ['#1f5e46', 'Green'], ['#23262e', 'Black']]
 function Letterhead() {
   const { s, up, dirty, save, busy, setS } = useSettingsForm(), toast = useToast(), { setSettings } = useSession()
   const L = s.letterhead
@@ -157,9 +157,10 @@ function Templates() {
   const list = useAsync(() => api<any[]>('/templates'), [])
   const [ed, setEd] = useState<any | null>(null)
   const save = async () => { try { if (ed.id) await api(`/templates/${ed.id}`, { method: 'PUT', body: { name: ed.name, data: ed.data } }); else await api('/templates', { body: { name: ed.name, data: ed.data } }); toast('Template saved', 'ok'); setEd(null); list.reload() } catch (e: any) { toast(e.message, 'err') } }
+  const restore = async () => { try { const r = await api<{ added: number }>('/templates/restore-defaults', { method: 'POST' }); toast(r.added ? `Added ${r.added} standard templates` : 'You already have all the standard templates', 'ok'); list.reload() } catch (e: any) { toast(e.message, 'err') } }
   const del = async (t: any) => { if (!confirm(`Delete the "${t.name}" template?`)) return; await api(`/templates/${t.id}`, { method: 'DELETE' }); list.reload() }
   return <div className="stack" style={{ maxWidth: 820 }}>
-    <div className="row"><p className="muted grow">One tap on a template fills the diagnosis, medicines, tests, advice and follow-up. Change only what differs for the patient.</p><button className="btn primary" onClick={() => setEd({ name: '', data: { diagnosis: '', meds: [], investigations: [], advice: [], follow_up_days: null } })}><Icon n="plus" />New template</button></div>
+    <div className="row wrap"><p className="muted grow">One tap on a template fills the diagnosis, medicines, tests, advice and follow-up. Change only what differs for the patient.</p><button className="btn" onClick={restore}>Add standard templates</button><button className="btn primary" onClick={() => setEd({ name: '', data: { diagnosis: '', meds: [], investigations: [], advice: [], follow_up_days: null } })}><Icon n="plus" />New template</button></div>
     <div className="card flush"><div className="list">{(list.data || []).map(t => <div key={t.id} className="li" style={{ alignItems: 'flex-start' }}>
       <span className="grow"><b>{t.name}</b><br /><span className="small muted">{t.data.meds.map((m: Med) => m.name).join(', ')}</span></span>
       <button className="btn sm" onClick={() => setEd(JSON.parse(JSON.stringify(t)))}>Edit</button><button className="icon-btn" aria-label="Delete" onClick={() => del(t)}><Icon n="trash" /></button>

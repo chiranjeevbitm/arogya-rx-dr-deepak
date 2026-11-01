@@ -1,6 +1,6 @@
 /* Arogya Rx parchi — the demo's format: letterhead with ink rule, patient row, findings left, ℞ right.
    Sized in mm: A5 (148 × 210) by default, A4 optional. Font size scales the whole page. */
-.parchi { --lh: #1d3a8a; --pi: #1A1F2B; --pm: #5D6372; --pl: #D8DCE5; width: var(--pw, 148mm); min-height: var(--ph, 210mm); background: #fff; color: var(--pi); font-family: 'Hind', 'Noto Sans Devanagari', sans-serif; font-size: var(--fs, 3.05mm); line-height: 1.42; padding: 6mm 6.5mm 4.5mm; display: flex; flex-direction: column; gap: 2.2mm; position: relative; overflow: hidden; box-sizing: border-box }
+.parchi { --lh: #16295f; --pi: #1A1F2B; --pm: #5D6372; --pl: #D8DCE5; width: var(--pw, 148mm); min-height: var(--ph, 210mm); background: #fff; color: var(--pi); font-family: 'Hind', 'Noto Sans Devanagari', sans-serif; font-size: var(--fs, 3.05mm); line-height: 1.42; padding: 6mm 6.5mm 4.5mm; display: flex; flex-direction: column; gap: 2.2mm; position: relative; overflow: hidden; box-sizing: border-box }
 .parchi * { box-sizing: border-box }
 .parchi.a4 { --pw: 210mm; --ph: 297mm; --fs: 3.7mm; padding: 9mm 10mm 7mm; gap: 3mm }
 .parchi .wm { position: absolute; left: -20%; right: -20%; top: 46%; transform: rotate(-24deg); text-align: center; font: 800 2.4em 'Martel', serif; color: var(--pi); opacity: .06; white-space: nowrap; pointer-events: none; letter-spacing: .04em }

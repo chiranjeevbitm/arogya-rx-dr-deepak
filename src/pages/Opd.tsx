@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
-import { ageSex } from '../lib/format'
+import { ageSex, istToday } from '../lib/format'
+import { parchiValidity, PARCHI_VALID_DAYS } from '../../shared/rx'
 import { useAsync, useLive, useToast } from '../components/ui'
 import Icon from '../components/Icon'
 import ConsultPane from './Consult'
 import Today, { AddToQueue } from './Today'
 
-type Visit = { id: string; token: number; status: string; name: string; sex: string | null; age_years: number | null; complaint: string | null; allergies: string[]; rx_id: string | null; rx_status: string | null; started_at: string | null; finished_at: string | null; patient_id: string }
+type Visit = { id: string; token: number; status: string; name: string; sex: string | null; age_years: number | null; complaint: string | null; allergies: string[]; rx_id: string | null; rx_status: string | null; last_rx_date: string | null; started_at: string | null; finished_at: string | null; patient_id: string }
 const fmtT = (s: number) => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0')
 
 export default function Opd() {
@@ -45,6 +46,14 @@ function DoctorOpd() {
     catch (e: any) { toast(e.message, 'err'); nav('/opd') }
   }
   const waiting = list.filter(v => v.status === 'waiting')
+  // on every load: tell the doctor which patients in the queue still hold a valid parchi (21 days)
+  const told = useRef(false)
+  useEffect(() => {
+    if (told.current || !q.data) return
+    told.current = true
+    const n = list.filter(v => v.status !== 'done' && parchiValidity(v.last_rx_date, istToday())).length
+    if (n) toast(`${n} patient${n > 1 ? 's' : ''} in the queue ${n > 1 ? 'have' : 'has'} a valid parchi (within ${PARCHI_VALID_DAYS} days).`, 'ok')
+  }, [q.data]) // eslint-disable-line
   return <div className="stack">
     <div className="page-h"><div className="grow"><h1>OPD &amp; Rx</h1><p>Call a token, tap a template or speak the consult. The parchi on the right is exactly what prints.</p></div>
       <button className="btn" onClick={() => setAdding(true)}><Icon n="plus" />Add patient</button></div>
@@ -57,7 +66,7 @@ function DoctorOpd() {
           const t = v.started_at && v.finished_at ? (new Date(v.finished_at).getTime() - new Date(v.started_at).getTime()) / 1000 : null
           return <button key={v.id} className={'q-item' + (on ? ' on' : '') + (v.status === 'done' ? ' done' : '')} onClick={() => v.status === 'done' && v.rx_id ? nav(`/opd/${v.rx_id}`) : open(v)}>
             <span className="q-tok">{v.token}</span>
-            <span style={{ minWidth: 0 }}><span className="q-name">{v.name} {v.allergies?.length > 0 && <span className="tag red" style={{ fontSize: 10 }}>ALLERGY</span>}</span>
+            <span style={{ minWidth: 0 }}><span className="q-name">{v.name} {v.allergies?.length > 0 && <span className="tag red" style={{ fontSize: 10 }}>ALLERGY</span>}{v.status !== 'done' && parchiValidity(v.last_rx_date, istToday()) && <span className="tag valid" style={{ fontSize: 10, marginLeft: 4 }} title={`Last parchi still valid until ${parchiValidity(v.last_rx_date, istToday())!.till}`}>PARCHI VALID</span>}</span>
               <span className="q-sub">{v.status === 'done' ? `Done${t ? ' · ' + fmtT(t) : ''}` : v.status === 'with_doctor' ? 'With doctor' : `${v.age_years ?? ''}${v.sex || ''}${v.complaint ? ' · ' + v.complaint : ''}`}</span></span>
           </button>
         })}

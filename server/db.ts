@@ -2,6 +2,22 @@ import postgres from 'postgres'
 import { MIGRATIONS } from './migrations.js'
 
 let _sql: postgres.Sql | null = null
+let lastUse = Date.now()
+
+/** A serverless instance can be frozen between requests; the pooler then drops its idle connections and the next query
+    would hang until the platform timeout. After a pause we test the connection first and rebuild it when it is dead. */
+export async function warmDb(): Promise<void> {
+  const idle = Date.now() - lastUse
+  lastUse = Date.now()
+  if (!_sql || idle < 4000) return
+  try {
+    await Promise.race([_sql`select 1`, new Promise((_, rej) => setTimeout(() => rej(new Error('stale db connection')), 2500))])
+  } catch {
+    const old = _sql; _sql = null
+    old?.end({ timeout: 1 }).catch(() => {})
+  }
+}
+export const markDbUse = () => { lastUse = Date.now() }
 
 // Supabase's direct host (db.<ref>.supabase.co) is IPv6-only and does not resolve on Vercel.
 // If one is given, switch to the IPv4 transaction pooler (this project is in eu-west-1; override with DB_POOLER_HOST).
@@ -26,8 +42,10 @@ export function sql(): postgres.Sql {
   _sql = postgres(url, {
     prepare: false,                 // Supabase transaction pooler (port 6543)
     max: local ? 10 : 3,
-    idle_timeout: 20,
-    connect_timeout: 15,
+    idle_timeout: 4,
+    max_lifetime: 120,
+    connect_timeout: 10,
+    keep_alive: 10,
     ssl: local ? false : 'require',
     connection: { application_name: 'arogya-rx', TimeZone: 'UTC' },
     onnotice: () => {},

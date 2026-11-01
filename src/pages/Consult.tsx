@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex, fmtDate, inr, d10 } from '../lib/format'
@@ -10,7 +11,7 @@ import { VoiceDialog, ScanDialog } from '../components/AiDialogs'
 import { PrintArea, printOnly, useRxOutput, WhatsAppPreview } from '../components/RxActions'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
-import { safetyChecks, sigHi, vitalFlag, normFreq, FREQS, ROUTES, COMORBIDITIES, ADDICTIONS, EXAM_SIGNS, SYSTEMIC, COMMON_INVESTIGATIONS, ADVICE_PRESETS, type Med, type Vitals } from '../../shared/rx'
+import { safetyChecks, sigHi, vitalFlag, normFreq, FREQS, ROUTES, COMORBIDITIES, ADDICTIONS, EXAM_SIGNS, SYSTEMIC, COMMON_INVESTIGATIONS, ADVICE_PRESETS, parchiValidity, PARCHI_VALID_DAYS, type Med, type Vitals } from '../../shared/rx'
 
 type Bundle = { rx: { id: string; status: string; rx_date: string; data: RxData; meds: Med[]; patient_id: string; visit_id: string | null; pdf_file_id: string | null }; patient: any; visit: any }
 type Template = { id: string; name: string; data: { diagnosis: string; meds: Med[]; investigations: string[]; advice: string[]; follow_up_days?: number | null } }
@@ -24,6 +25,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const [b, setB] = useState<Bundle | null>(null), [err, setErr] = useState('')
   const [data, setData] = useState<RxData>({}), [meds, setMeds] = useState<Med[]>([])
   const [saved, setSaved] = useState<'saved' | 'dirty' | 'saving'>('saved')
+  const [regular, setRegular] = useState<{ name: string; defaults: Partial<Med> }[]>([])
   const [templates, setTemplates] = useState<Template[]>([]), [hist, setHist] = useState<Hist | null>(null)
   const [voice, setVoice] = useState(false), [scan, setScan] = useState(false), [editPt, setEditPt] = useState(false), [override, setOverride] = useState<{ msg: string; then: () => void } | null>(null)
   const [wa, setWa] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [busy, setBusy] = useState(false)
@@ -39,7 +41,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
       api<Hist>(`/patients/${x.rx.patient_id}`).then(setHist).catch(() => {})
     } catch (e: any) { setErr(e.message) }
   }, [rxId])
-  useEffect(() => { setB(null); setErr(''); load(); api<Template[]>('/templates').then(setTemplates).catch(() => {}) }, [load])
+  useEffect(() => { setB(null); setErr(''); load(); api<Template[]>('/templates').then(setTemplates).catch(() => {}); api<{ name: string; defaults: Partial<Med> }[]>('/medicines/regular').then(setRegular).catch(() => {}) }, [load])
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
 
   const final = b?.rx.status === 'final'
@@ -73,6 +75,22 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const setV = (k: keyof Vitals, v: string) => set('vitals', { ...(data.vitals || {}), [k]: v })
   const setMed = (i: number, p: Partial<Med>) => setMeds(ms => ms.map((m, j) => j === i ? { ...m, ...p } : m))
 
+  const isRegular = (name: string) => regular.some(r => r.name.toLowerCase() === name.toLowerCase())
+  const toggleRegular = async (m: Med) => {
+    try {
+      if (isRegular(m.name)) { await api(`/medicines/regular?name=${encodeURIComponent(m.name)}`, { method: 'DELETE' }); setRegular(r => r.filter(x => x.name.toLowerCase() !== m.name.toLowerCase())); toast(`${m.name} removed from regular medicines`) }
+      else { const defaults = { form: m.form, dose: m.dose, freq: m.freq, timing: m.timing, days: m.days, route: m.route, kind: m.kind }; await api('/medicines/regular', { body: { name: m.name, defaults } }); setRegular(r => [...r, { name: m.name, defaults }].sort((a, b) => a.name.localeCompare(b.name))); toast(`${m.name} added to regular medicines`, 'ok') }
+    } catch (e: any) { toast(e.message, 'err') }
+  }
+  const saveAsTemplate = async () => {
+    if (!meds.length && !data.diagnosis) return toast('Add a diagnosis or medicines first.', 'err')
+    const name = (prompt('Name for this template (e.g. Diabetes follow-up):', data.diagnosis || '') || '').trim()
+    if (name.length < 2) return
+    try {
+      await api('/templates', { body: { name, data: { diagnosis: data.diagnosis || '', meds, investigations: data.investigations || [], advice: data.advice || [], follow_up_days: data.follow_up?.days || null } } })
+      setTemplates(await api<Template[]>('/templates')); toast(`Template "${name}" saved. It is on the list above.`, 'ok')
+    } catch (e: any) { toast(e.message, 'err') }
+  }
   const applyTemplate = (t: Template) => {
     const merge = meds.length > 0 && !confirm(`Replace the ${meds.length} medicine(s) already added with "${t.name}"?\nOK = replace, Cancel = add to them.`)
     setMeds(merge ? [...meds, ...t.data.meds.filter(m => !meds.some(x => x.name === m.name))] : t.data.meds.map(m => ({ ...m })))
@@ -124,6 +142,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
           {!final && <span className={'savebadge' + (saved !== 'saved' ? ' dirty' : '')}><i />{saved === 'saved' ? 'Saved' : saved === 'saving' ? 'Saving…' : 'Unsaved'}</span>}
         </div>
       </div>
+      {(() => { const val = parchiValidity(lastFinal?.rx_date, d10(b.rx.rx_date)); return val && lastFinal ? <div className="alert ok"><b>Parchi valid</b><span>Last prescription {val.ago === 0 ? 'today' : val.ago === 1 ? 'yesterday' : `${val.ago} days ago`} ({fmtDate(d10(lastFinal.rx_date))}). It is valid for {PARCHI_VALID_DAYS} days, until {fmtDate(val.till)} ({val.daysLeft} day{val.daysLeft === 1 ? '' : 's'} left).</span></div> : null })()}
       {summary && <div className="summary"><b>Summary of past visits:</b> {summary} {lastFinal && !ro && <button className="btn sm" style={{ marginLeft: 6 }} onClick={() => repeat(lastFinal)}>Repeat medicines</button>}</div>}
       {final && <div className="alert ok"><b>Final.</b><span className="grow">Print it, send it on WhatsApp, or call the next patient.</span><button className="btn sm" onClick={reopen}>Reopen to edit</button></div>}
 
@@ -145,15 +164,16 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
       </fieldset>
       </details>
 
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-dx">Diagnosis · one-tap templates</label></div>
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-dx">Diagnosis · one-tap templates</label>{!ro && <span className="row"><button type="button" className="btn sm ghost" onClick={saveAsTemplate}><Icon n="plus" />Save this as a template</button><Link className="btn sm ghost" to="/settings/templates">Edit templates</Link></span>}</div>
         <div className="chips">{templates.map(t => <button key={t.id} type="button" className="chip" onClick={() => applyTemplate(t)}>{t.name} <span className="faint tiny">{t.data.meds.length} Rx</span></button>)}</div>
         <input id="in-dx" className="inp" value={data.diagnosis || ''} onChange={e => set('diagnosis', e.target.value)} placeholder="Provisional diagnosis" />
       </fieldset>
 
       <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Medicines</span><span className="tag green">Jan Aushadhi price shown</span></div>
+        {!ro && regular.length > 0 && <div className="chips" aria-label="Regular medicines"><span className="lbl" style={{ alignSelf: 'center' }}>★ Regular</span>{regular.map(r => <button key={r.name} type="button" className="chip" onClick={() => setMeds(ms => ms.some(m => m.name === r.name) ? ms : [...ms, medFromHit({ name: r.name, defaults: r.defaults })])}>+ {r.name}</button>)}</div>}
         {!ro && <MedSearch onPick={m => setMeds(ms => [...ms, m])} />}
         {meds.length === 0 ? <p className="small muted">Tap a template, search for a medicine, or speak the consult.</p> :
-          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} ja={m.kind !== 'ja' ? ja[m.name] : null} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
+          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} ja={m.kind !== 'ja' ? ja[m.name] : null} regular={isRegular(m.name)} onStar={() => toggleRegular(m)} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
         {alerts.map((a, i) => <div key={i} className={'alert ' + a.level}><b>{a.level === 'crit' ? 'Stop' : a.level === 'warn' ? 'Check' : 'Note'}</b><span>{a.text}</span></div>)}
         {cost.known > 0 && <div className="cost"><div><span>Branded</span><b>{inr(cost.branded)}</b></div><div><span>Jan Aushadhi</span><b>{inr(cost.jan)}</b></div><div className="save"><span>Patient saves</span><b>{inr(cost.save)}</b></div></div>}
       </fieldset>
@@ -245,12 +265,15 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   </>
 }
 
-function MedRow({ i, m, set, remove, move, alerted, ja, ro }: { i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ja?: { name: string; price: number } | null; ro: boolean }) {
+function MedRow({ i, m, set, remove, move, alerted, ja, ro, regular, onStar }: { regular: boolean; onStar: () => void; i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ja?: { name: string; price: number } | null; ro: boolean }) {
   const [more, setMore] = useState(false)
   return <div className={'medrow' + (alerted ? ' alerted' : '') + (more ? ' expanded' : '')}>
     <span className="sn">{i + 1}</span>
     <div style={{ minWidth: 0 }}>
-      <div className="nm">{m.form ? m.form + '. ' : ''}{m.name}{m.kind === 'ja' && m.price ? <span className="tag green" style={{ marginLeft: 6 }}>JA {inr(m.price)}</span> : null}</div>
+      <div className="nm nm-line">{m.form ? <span className="faint">{m.form}.</span> : null}
+        {ro ? <span>{m.name}</span> : <input className="nm-edit" value={m.name} aria-label="Medicine name (edit to change)" title="Click to edit the medicine name" onChange={e => set(m.kind === 'ja' || m.kind === 'brand' ? { name: e.target.value, kind: 'custom', price: null } : { name: e.target.value })} />}
+        {m.kind === 'ja' && m.price ? <span className="tag green">JA {inr(m.price)}</span> : null}
+        {!ro && <button type="button" className={'icon-btn star' + (regular ? ' on' : '')} onClick={onStar} aria-pressed={regular} aria-label={regular ? 'Remove from regular medicines' : 'Add to regular medicines'} title={regular ? 'Regular medicine (click to remove)' : 'Add to regular medicines'}>{regular ? '★' : '☆'}</button>}</div>
       <div className="hi">{sigHi(m)}</div>
     </div>
     {!ro ? <button type="button" className="icon-btn" onClick={() => setMore(x => !x)} aria-label="More options" aria-expanded={more}><Icon n="edit" /></button> : <span />}

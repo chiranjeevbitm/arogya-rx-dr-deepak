@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { ensureSchema, HttpError } from './db.js'
+import { ensureSchema, HttpError, warmDb, markDbUse } from './db.js'
 import type { AuthUser } from './lib/auth.js'
 import auth from './routes/auth.js'
 import setup from './routes/setup.js'
@@ -47,8 +47,8 @@ app.use('*', async (c, next) => {
     const host = c.req.header('x-forwarded-host') || c.req.header('host')
     if (origin && host && new URL(origin).host !== host) throw new HttpError(403, 'Cross-site request blocked.')
   }
-  if (!c.req.path.startsWith('/api/health')) await ensureSchema()
-  await next()
+  if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema() }
+  try { await next() } finally { markDbUse() }
 })
 
 app.get('/health', c => c.json({ ok: true, at: new Date().toISOString() }))

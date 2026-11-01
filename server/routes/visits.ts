@@ -18,10 +18,12 @@ r.get('/', async c => {
   return c.json(await sql()`
     select v.*, p.name, p.uhid, p.sex, p.age_years, p.phone, p.allergies, p.conditions,
       rx.id as rx_id, rx.status as rx_status,
+      lr.rx_date as last_rx_date,
       b.id as bill_id, b.paid::float as bill_paid, b.mode as bill_mode
     from arx.visits v
     join arx.patients p on p.id = v.patient_id
     left join lateral (select id, status from arx.prescriptions where visit_id = v.id order by created_at desc limit 1) rx on true
+    left join lateral (select rx_date from arx.prescriptions where patient_id = v.patient_id and status = 'final' and visit_id is distinct from v.id order by rx_date desc limit 1) lr on true
     left join lateral (select id, paid, mode from arx.bills where visit_id = v.id and status <> 'void' order by created_at desc limit 1) b on true
     where v.clinic_id = ${me(c).clinic_id} and v.visit_date = ${d}
     order by case v.status when 'with_doctor' then 0 when 'waiting' then 1 when 'done' then 2 else 3 end, v.token`)

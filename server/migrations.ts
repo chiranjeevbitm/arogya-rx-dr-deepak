@@ -317,4 +317,13 @@ create policy server_all on arx.app_secrets to current_user using (true) with ch
 do $$ begin if exists (select 1 from pg_roles where rolname = 'anon') then execute 'revoke all on arx.app_secrets from anon, authenticated'; end if; end $$;
 `,
   },
+  {
+    version: 4,
+    name: 'regular_medicines_navy',
+    sql: /* sql */ `
+alter table arx.med_usage add column pinned boolean not null default false;
+create index med_usage_pinned on arx.med_usage (clinic_id) where pinned;
+update arx.clinics set settings = jsonb_set(settings, '{letterhead,ink}', '"#16295f"') where settings #>> '{letterhead,ink}' = '#1d3a8a';
+`,
+  },
 ]
