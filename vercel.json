@@ -7,12 +7,16 @@
     "bom1"
   ],
   "functions": {
-    "api/[...route].ts": {
+    "api/index.ts": {
       "maxDuration": 60,
       "memory": 1024
     }
   },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
     {
       "source": "/((?!api/|seed/|assets/|favicon|manifest|sw\\.js|icons/).*)",
       "destination": "/index.html"
