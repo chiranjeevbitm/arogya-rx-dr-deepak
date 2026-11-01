@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql, HttpError, nextCounter } from '../db'
-import { body, me, P, type Env } from '../app'
-import { requireAuth } from '../lib/auth'
-import { audit } from '../lib/audit'
-import { istToday } from '../../shared/rx'
+import { sql, HttpError, nextCounter } from '../db.js'
+import { body, me, P, type Env } from '../app.js'
+import { requireAuth } from '../lib/auth.js'
+import { audit } from '../lib/audit.js'
+import { istToday } from '../../shared/rx.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())

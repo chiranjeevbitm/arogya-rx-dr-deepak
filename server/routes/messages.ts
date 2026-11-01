@@ -1,13 +1,13 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql, HttpError } from '../db'
-import { body, me, P, type Env } from '../app'
-import { requireAuth } from '../lib/auth'
-import { audit } from '../lib/audit'
-import { sendCampaign, waApiConfigured, waLink } from '../lib/whatsapp'
-import { rxBundle, publicRxUrl } from './rx'
-import { displayName, sigHi, fmtDateHi, addDaysISO, istToday, adviceHi, normPhone, fmtDate } from '../../shared/rx'
-import { mergeSettings } from '../../shared/settings'
+import { sql, HttpError } from '../db.js'
+import { body, me, P, type Env } from '../app.js'
+import { requireAuth } from '../lib/auth.js'
+import { audit } from '../lib/audit.js'
+import { sendCampaign, waApiConfigured, waLink } from '../lib/whatsapp.js'
+import { rxBundle, publicRxUrl } from './rx.js'
+import { displayName, sigHi, fmtDateHi, addDaysISO, istToday, adviceHi, normPhone, fmtDate } from '../../shared/rx.js'
+import { mergeSettings } from '../../shared/settings.js'
 
 const r = new Hono<Env>()
 

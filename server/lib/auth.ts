@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import { SignJWT, jwtVerify } from 'jose'
 import type { Context, Next } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { sql, HttpError, dbSessionSecret } from '../db'
+import { sql, HttpError, dbSessionSecret } from '../db.js'
 
 const scrypt = promisify(_scrypt) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>
 const N = 16384, R = 8, P = 1, LEN = 64

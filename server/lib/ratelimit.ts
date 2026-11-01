@@ -1,4 +1,4 @@
-import { sql, HttpError } from '../db'
+import { sql, HttpError } from '../db.js'
 
 /** Fixed-window limiter stored in Postgres (works across serverless instances). */
 export async function rateLimit(key: string, max: number, windowSec: number) {

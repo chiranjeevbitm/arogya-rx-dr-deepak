@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
-import { sql } from '../db'
-import type { AuthUser } from './auth'
+import { sql } from '../db.js'
+import type { AuthUser } from './auth.js'
 
 export function clientIp(c: Context): string {
   return (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || c.req.header('x-real-ip') || ''

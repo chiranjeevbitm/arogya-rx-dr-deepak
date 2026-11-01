@@ -1,6 +1,6 @@
-import { sql } from '../db'
-import type { ClinicSettings } from '../../shared/settings'
-import { istToday } from '../../shared/rx'
+import { sql } from '../db.js'
+import type { ClinicSettings } from '../../shared/settings.js'
+import { istToday } from '../../shared/rx.js'
 
 export type Slot = { time: string; session: string; booked: number; free: number; past: boolean }
 

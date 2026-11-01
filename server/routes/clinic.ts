@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql, HttpError } from '../db'
-import { body, me, P, type Env } from '../app'
-import { requireAuth, hashPassword } from '../lib/auth'
-import { audit } from '../lib/audit'
-import { putFile, getFile } from '../lib/storage'
-import { mergeSettings } from '../../shared/settings'
-import { normPhone } from '../../shared/rx'
+import { sql, HttpError } from '../db.js'
+import { body, me, P, type Env } from '../app.js'
+import { requireAuth, hashPassword } from '../lib/auth.js'
+import { audit } from '../lib/audit.js'
+import { putFile, getFile } from '../lib/storage.js'
+import { mergeSettings } from '../../shared/settings.js'
+import { normPhone } from '../../shared/rx.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())

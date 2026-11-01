@@ -1,5 +1,5 @@
 /* Clinic settings shape and Dr. Deepak Kumar's defaults (from his printed parchi). */
-import type { Med } from './rx'
+import type { Med } from './rx.js'
 
 export type Session = { label: string; start: string; end: string }
 export type ClinicSettings = {

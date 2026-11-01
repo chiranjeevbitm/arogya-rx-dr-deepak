@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql, HttpError } from '../db'
-import { body, me, type Env } from '../app'
-import { requireAuth } from '../lib/auth'
-import { detectForm } from '../../shared/rx'
+import { sql, HttpError } from '../db.js'
+import { body, me, type Env } from '../app.js'
+import { requireAuth } from '../lib/auth.js'
+import { detectForm } from '../../shared/rx.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())

@@ -1,6 +1,6 @@
 /* Files go to a private Supabase Storage bucket when configured, otherwise into Postgres (bytea).
    Patients never get a storage URL directly: they get a signed link served by our API. */
-import { sql, HttpError } from '../db'
+import { sql, HttpError } from '../db.js'
 
 const BUCKET = 'arogya-rx'
 const cfg = () => ({ url: (process.env.SUPABASE_URL || '').replace(/\/$/, ''), key: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '' })

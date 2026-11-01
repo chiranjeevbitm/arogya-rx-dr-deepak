@@ -3,13 +3,13 @@
    safe, parameterised query scoped to this clinic. Without an AI key a keyword parser is used. */
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql } from '../db'
-import { body, me, type Env } from '../app'
-import { requireAuth } from '../lib/auth'
-import { rateLimit } from '../lib/ratelimit'
-import { aiConfigured, aiJson } from '../lib/ai'
-import { istToday, addDaysISO, fmtDate } from '../../shared/rx'
-import { normTest } from './patients'
+import { sql } from '../db.js'
+import { body, me, type Env } from '../app.js'
+import { requireAuth } from '../lib/auth.js'
+import { rateLimit } from '../lib/ratelimit.js'
+import { aiConfigured, aiJson } from '../lib/ai.js'
+import { istToday, addDaysISO, fmtDate } from '../../shared/rx.js'
+import { normTest } from './patients.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())

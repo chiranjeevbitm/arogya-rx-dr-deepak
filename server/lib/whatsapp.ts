@@ -1,6 +1,6 @@
 /* WhatsApp delivery. With AISENSY_API_KEY set, messages go out automatically through an
    approved AiSensy campaign. Without it the app builds a wa.me link that staff tap to send. */
-import { HttpError } from '../db'
+import { HttpError } from '../db.js'
 
 export const waApiConfigured = () => !!process.env.AISENSY_API_KEY
 

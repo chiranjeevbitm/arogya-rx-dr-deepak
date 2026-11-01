@@ -1,6 +1,6 @@
 /* LLM calls via OpenAI's Responses API (default model gpt-5-nano) with strict JSON-schema output.
    Every output is a draft that the doctor reviews; nothing is saved or printed from here. */
-import { sql, HttpError } from '../db'
+import { sql, HttpError } from '../db.js'
 
 export const aiConfigured = () => !!process.env.OPENAI_API_KEY
 export const aiModel = () => process.env.AI_MODEL || 'gpt-5-nano'

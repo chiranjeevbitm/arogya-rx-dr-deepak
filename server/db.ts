@@ -1,5 +1,5 @@
 import postgres from 'postgres'
-import { MIGRATIONS } from './migrations'
+import { MIGRATIONS } from './migrations.js'
 
 let _sql: postgres.Sql | null = null
 
