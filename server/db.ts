@@ -40,7 +40,14 @@ async function migrate() {
       console.log(`[db] applied migration ${m.version} ${m.name}`)
     }
   })
+  // Session-signing key: SESSION_SECRET if set, otherwise generated once and kept in the database.
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+    await db`insert into arx.app_secrets (name, value) values ('session', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')) on conflict (name) do nothing`
+    const [r] = await db`select value from arx.app_secrets where name = 'session'`
+    dbSessionSecret = r.value
+  }
 }
+export let dbSessionSecret: string | null = null
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message) }

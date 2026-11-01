@@ -10,8 +10,7 @@ Tables are created automatically on first start in a private `arx` schema. Nothi
 | Name | Value |
 | --- | --- |
 | `DATABASE_URL` | Supabase transaction pooler URI (step 1) |
-| `SESSION_SECRET` | already set (random) |
-| `SETUP_TOKEN` | already set; used once on /setup, then delete it |
+| `SETUP_TOKEN` | any code you choose (e.g. 12+ letters/numbers); used once on /setup, then delete it |
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | step 1 (files: PDFs, scans, logo) |
 | `OPENAI_API_KEY` | OpenAI key; `AI_MODEL=gpt-5-nano` is the default |
 | `APP_URL` | the production URL, e.g. https://arogya-rx-dr-deepak.vercel.app |

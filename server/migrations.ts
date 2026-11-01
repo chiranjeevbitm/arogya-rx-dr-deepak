@@ -307,4 +307,14 @@ begin
 end $$;
 `,
   },
+  {
+    version: 3,
+    name: 'app_secrets',
+    sql: /* sql */ `
+create table arx.app_secrets (name text primary key, value text not null, created_at timestamptz not null default now());
+alter table arx.app_secrets enable row level security;
+create policy server_all on arx.app_secrets to current_user using (true) with check (true);
+do $$ begin if exists (select 1 from pg_roles where rolname = 'anon') then execute 'revoke all on arx.app_secrets from anon, authenticated'; end if; end $$;
+`,
+  },
 ]

@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import { SignJWT, jwtVerify } from 'jose'
 import type { Context, Next } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { sql, HttpError } from '../db'
+import { sql, HttpError, dbSessionSecret } from '../db'
 
 const scrypt = promisify(_scrypt) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>
 const N = 16384, R = 8, P = 1, LEN = 64
@@ -22,8 +22,9 @@ export async function verifyPassword(pw: string, stored: string): Promise<boolea
 }
 
 export function secret(): Uint8Array {
-  const s = process.env.SESSION_SECRET
-  if (!s || s.length < 32) throw new HttpError(503, 'SESSION_SECRET must be set (32+ characters).')
+  const env = process.env.SESSION_SECRET
+  const s = env && env.length >= 32 ? env : dbSessionSecret
+  if (!s) throw new HttpError(503, 'Session key is not ready yet. Try again in a moment.')
   return new TextEncoder().encode(s)
 }
 

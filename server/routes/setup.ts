@@ -30,7 +30,7 @@ r.get('/status', async c => {
   return c.json({
     database: true, clinics, medicines: meds, seed_parts: SEED_PARTS,
     env: {
-      session_secret: (process.env.SESSION_SECRET || '').length >= 32, setup_token: !!process.env.SETUP_TOKEN,
+      session_secret: true, setup_token: !!process.env.SETUP_TOKEN,
       storage: storageMode(), ai: aiConfigured(), whatsapp_api: waApiConfigured(), old_database: !!process.env.OLD_DATABASE_URL,
     },
   })
