@@ -5,6 +5,7 @@ import { body, me, type Env } from '../app.js'
 import { requireAuth } from '../lib/auth.js'
 import { detectForm } from '../../shared/rx.js'
 
+const STARTER = ['paracetamol tablets ip 500%', 'pantoprazole%tablets%40%', 'cetirizine%tablets%10%', 'azithromycin tablets ip 500%', 'amoxicillin%capsules%500%', 'metformin%tablets ip 500%', 'amlodipine%tablets%5%', 'atorvastatin%tablets%10%', 'telmisartan%tablets%40%', 'omeprazole%capsules%20%', 'ondansetron%tablets%4%', 'diclofenac%tablets%50%', 'ibuprofen%tablets%400%', 'montelukast%tablets%10%', 'levocetirizine%tablets%5%']
 const r = new Hono<Env>()
 r.use('*', requireAuth())
 
@@ -14,7 +15,12 @@ r.get('/', async c => {
   const q = (c.req.query('q') || '').trim().toLowerCase()
   const cid = me(c).clinic_id
   if (q.length < 2) {
-    return c.json(await sql()`select name, defaults, uses from arx.med_usage where clinic_id = ${cid} order by uses desc, last_used desc limit 15`)
+    const used = await sql()`select name, defaults, uses from arx.med_usage where clinic_id = ${cid} order by uses desc, last_used desc limit 15`
+    if (used.length >= 5) return c.json(used)
+    // new clinic: suggest common generics until the doctor's own favourites build up
+    const starter = await sql()`select id, name, kind, category, manufacturer, pack, price::float as price, form from arx.medicines
+      where kind = 'ja' and lower(name) like any(${STARTER}::text[]) order by name limit 15`
+    return c.json([...used, ...starter])
   }
   const db = sql()
   const [fav, hits] = await Promise.all([

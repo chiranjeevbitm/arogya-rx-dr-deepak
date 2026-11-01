@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { ensureSchema, HttpError, sql } from './db.js'
+import { ensureSchema, HttpError } from './db.js'
 import type { AuthUser } from './lib/auth.js'
 import auth from './routes/auth.js'
 import setup from './routes/setup.js'
@@ -52,21 +52,6 @@ app.use('*', async (c, next) => {
 })
 
 app.get('/health', c => c.json({ ok: true, at: new Date().toISOString() }))
-// TEMPORARY diagnostic (removed after use)
-app.get('/health/medsearch', async c => {
-  const out: any = {}
-  for (const q of ['dolo', 'metformin', 'azith', 'pan']) {
-    try {
-      const r = await sql()`select name, kind from arx.medicines
-        where (lower(name) like ${q + '%'} or lower(name) operator(extensions.%) ${q} or lower(name) like ${'% ' + q + '%'})
-        order by (lower(name) like ${q + '%'}) desc, (kind = 'ja') desc, extensions.similarity(lower(name), ${q}) desc, length(name) limit 25`
-      out[q] = { n: r.length, first: r.slice(0, 2).map(x => x.name) }
-    } catch (e: any) { out[q] = { error: String(e.message).slice(0, 160) } }
-  }
-  const [{ n }] = await sql()`select count(*)::int as n from arx.medicines`
-  out.total = n
-  return c.json(out)
-})
 app.route('/auth', auth)
 app.route('/setup', setup)
 app.route('/clinic', clinic)

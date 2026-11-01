@@ -17,12 +17,12 @@ export function medFromHit(h: { name: string; kind?: string; form?: string; pric
 }
 
 export default function MedSearch({ onPick, autoFocus }: { onPick: (m: Med) => void; autoFocus?: boolean }) {
-  const [q, setQ] = useState(''), [hits, setHits] = useState<Hit[]>([]), [open, setOpen] = useState(false), [hl, setHl] = useState(0)
+  const [q, setQ] = useState(''), [err, setErr] = useState(''), [hits, setHits] = useState<Hit[]>([]), [open, setOpen] = useState(false), [hl, setHl] = useState(0)
   const box = useRef<HTMLDivElement>(null), inp = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!open) return
     const ac = new AbortController()
-    const t = setTimeout(() => api<Hit[]>('/medicines?q=' + encodeURIComponent(q.trim()), { signal: ac.signal }).then(h => { setHits(h); setHl(0) }).catch(() => {}), q ? 140 : 0)
+    const t = setTimeout(() => api<Hit[]>('/medicines?q=' + encodeURIComponent(q.trim()), { signal: ac.signal }).then(h => { setHits(h); setErr(''); setHl(0) }).catch(e => { if (e?.name !== 'AbortError') setErr(e?.message || 'Could not load medicines. Check your connection and try again.') }), q ? 140 : 0)
     return () => { clearTimeout(t); ac.abort() }
   }, [q, open])
   useEffect(() => { const f = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }; document.addEventListener('mousedown', f); return () => document.removeEventListener('mousedown', f) }, [])
@@ -41,8 +41,9 @@ export default function MedSearch({ onPick, autoFocus }: { onPick: (m: Med) => v
         else if (e.key === 'Enter') { e.preventDefault(); if (opts.length) pick(opts[hl] ?? null) }
         else if (e.key === 'Escape') setOpen(false)
       }} role="combobox" aria-expanded={open} aria-autocomplete="list" />
-    {open && opts.length > 0 && <div className="ac-list" role="listbox">
-      {!q && <div className="tiny muted" style={{ padding: '6px 12px' }}>Your most used medicines</div>}
+    {open && err && <div className="ac-list"><div className="small" style={{ padding: '10px 12px', color: '#B2261E' }}>{err}</div></div>}
+    {open && !err && opts.length > 0 && <div className="ac-list" role="listbox">
+      {q.trim().length < 2 && <div className="tiny muted" style={{ padding: '6px 12px' }}>{hits.some(h => h.favourite) ? 'Your most used medicines' : 'Common medicines. Type 2 or more letters to search all 9,900.'}</div>}
       {opts.map((h, i) => h ? <button type="button" key={h.name + i} className={'ac-item' + (i === hl ? ' hl' : '')} onMouseEnter={() => setHl(i)} onClick={() => pick(h)} role="option" aria-selected={i === hl}>
         <span className="grow"><span className="nm">{h.name}</span><br /><span className="meta">{h.favourite ? `Your usual: ${[h.defaults?.dose, h.defaults?.freq, h.defaults?.days ? h.defaults.days + ' days' : ''].filter(Boolean).join(', ')}` : [h.manufacturer, h.category, h.pack].filter(Boolean).join(', ')}</span></span>
         {h.favourite ? <span className="tag ink">Used {h.uses}×</span> : h.kind === 'ja' ? <span className="tag green">Jan Aushadhi{h.price ? ' ' + inr(h.price) : ''}</span> : h.kind === 'custom' ? <span className="tag">Added by you</span> : null}
