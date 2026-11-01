@@ -3,10 +3,25 @@ import { MIGRATIONS } from './migrations.js'
 
 let _sql: postgres.Sql | null = null
 
+// Supabase's direct host (db.<ref>.supabase.co) is IPv6-only and does not resolve on Vercel.
+// If one is given, switch to the IPv4 transaction pooler (Mumbai by default; override with DB_POOLER_HOST).
+function usePooler(raw: string): string {
+  try {
+    const u = new URL(raw)
+    const m = /^db\.([a-z0-9]+)\.supabase\.co$/.exec(u.hostname)
+    if (!m) return raw
+    u.hostname = process.env.DB_POOLER_HOST || 'aws-0-ap-south-1.pooler.supabase.com'
+    u.port = '6543'
+    if (!u.username.includes('.')) u.username = `${u.username}.${m[1]}`
+    return u.toString()
+  } catch { return raw }
+}
+
 export function sql(): postgres.Sql {
   if (_sql) return _sql
-  const url = process.env.DATABASE_URL
-  if (!url) throw new HttpError(503, 'DATABASE_URL is not set. Add it in the Vercel project settings.')
+  const raw = process.env.DATABASE_URL
+  if (!raw) throw new HttpError(503, 'DATABASE_URL is not set. Add it in the Vercel project settings.')
+  const url = usePooler(raw)
   const local = /localhost|127\.0\.0\.1|\/var\/run/.test(url)
   _sql = postgres(url, {
     prepare: false,                 // Supabase transaction pooler (port 6543)
