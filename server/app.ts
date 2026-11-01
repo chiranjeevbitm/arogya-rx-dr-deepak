@@ -52,20 +52,6 @@ app.use('*', async (c, next) => {
 })
 
 app.get('/health', c => c.json({ ok: true, at: new Date().toISOString() }))
-// TEMPORARY: find which Supabase pooler region hosts this project (removed after use)
-app.get('/health/pooler', async c => {
-  const { default: pg } = await import('postgres')
-  const raw = process.env.DATABASE_URL || ''
-  const u = new URL(raw); const ref = /^db\.([a-z0-9]+)\./.exec(u.hostname)?.[1] || u.username.split('.')[1]
-  const regions = ['ap-south-1','ap-southeast-1','ap-southeast-2','ap-northeast-1','ap-northeast-2','us-east-1','us-east-2','us-west-1','us-west-2','eu-west-1','eu-west-2','eu-west-3','eu-central-1','eu-central-2','eu-north-1','ca-central-1','sa-east-1']
-  const hosts = regions.flatMap(r => [`aws-0-${r}.pooler.supabase.com`, `aws-1-${r}.pooler.supabase.com`])
-  const res = await Promise.all(hosts.map(async h => {
-    const x = new URL(raw); x.hostname = h; x.port = '6543'; x.username = `postgres.${ref}`
-    const s = pg(x.toString(), { max: 1, connect_timeout: 6, prepare: false })
-    try { await s`select 1`; return { h, ok: true } } catch (e: any) { return { h, ok: false, m: String(e.message).slice(0, 50) } } finally { s.end({ timeout: 1 }).catch(() => {}) }
-  }))
-  return c.json({ winners: res.filter(r => r.ok).map(r => r.h), other: [...new Set(res.filter(r => !r.ok).map(r => r.m))] })
-})
 app.route('/auth', auth)
 app.route('/setup', setup)
 app.route('/clinic', clinic)
