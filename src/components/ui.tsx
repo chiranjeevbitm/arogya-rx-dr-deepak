@@ -64,4 +64,15 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { ...state, reload: () => setN(x => x + 1), setData: (d: T) => set(s => ({ ...s, data: d })) }
 }
 
+/** Calls `fn` every `ms` while the tab is visible, and straight away when the tab is focused or the network returns. */
+export function useLive(fn: () => void, ms: number) {
+  const ref = useRef(fn); ref.current = fn
+  useEffect(() => {
+    const go = () => { if (document.visibilityState === 'visible') ref.current() }
+    const t = setInterval(go, ms)
+    document.addEventListener('visibilitychange', go); window.addEventListener('focus', go); window.addEventListener('online', go)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', go); window.removeEventListener('focus', go); window.removeEventListener('online', go) }
+  }, [ms])
+}
+
 export function confirmAsk(text: string) { return window.confirm(text) }

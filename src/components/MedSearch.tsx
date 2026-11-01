@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { inr } from '../lib/format'
+import { loadCatalogue, searchCatalogue, type CatRow } from '../lib/medcat'
 import { detectForm, defaultDose, defaultRoute, type Med } from '../../shared/rx'
 
 type Hit = { name: string; kind: 'ja' | 'brand' | 'custom'; form?: string; category?: string; manufacturer?: string; pack?: string; price?: number | null; favourite?: boolean; uses?: number; defaults?: Partial<Med> }
@@ -17,21 +18,41 @@ export function medFromHit(h: { name: string; kind?: string; form?: string; pric
 }
 
 export default function MedSearch({ onPick, autoFocus }: { onPick: (m: Med) => void; autoFocus?: boolean }) {
-  const [q, setQ] = useState(''), [err, setErr] = useState(''), [hits, setHits] = useState<Hit[]>([]), [open, setOpen] = useState(false), [hl, setHl] = useState(0)
+  const [q, setQ] = useState(''), [err, setErr] = useState(''), [open, setOpen] = useState(false), [hl, setHl] = useState(0)
+  const [cat, setCat] = useState<CatRow[] | null>(null), [custom, setCustom] = useState<CatRow[]>([])
+  const [favs, setFavs] = useState<Hit[]>([]), [remote, setRemote] = useState<Hit[]>([])
   const box = useRef<HTMLDivElement>(null), inp = useRef<HTMLInputElement>(null)
+  const term = q.trim()
+  // the catalogue is searched in the browser; your own added medicines come from the clinic
   useEffect(() => {
-    if (!open) return
+    loadCatalogue().then(setCat).catch(() => {})
+    api<{ name: string; form?: string }[]>('/medicines/custom').then(r => setCustom(r.map(x => ({ name: x.name, kind: 'custom' as const, form: x.form, low: x.name.toLowerCase() })))).catch(() => {})
+  }, [])
+  // favourites and common medicines for an empty box; refreshed each time the box opens
+  useEffect(() => {
+    if (!open || term.length >= 2) return
     const ac = new AbortController()
-    const t = setTimeout(() => api<Hit[]>('/medicines?q=' + encodeURIComponent(q.trim()), { signal: ac.signal }).then(h => { setHits(h); setErr(''); setHl(0) }).catch(e => { if (e?.name !== 'AbortError') setErr(e?.message || 'Could not load medicines. Check your connection and try again.') }), q ? 140 : 0)
+    api<Hit[]>('/medicines?q=', { signal: ac.signal }).then(h => { setFavs(h); setErr('') }).catch(e => { if (e?.name !== 'AbortError') setErr(e?.message || 'Could not load medicines.') })
+    return () => ac.abort()
+  }, [open, term.length >= 2]) // eslint-disable-line
+  const local = useMemo(() => term.length >= 2 && cat ? searchCatalogue(cat, custom, term) : null, [term, cat, custom])
+  // typo-tolerant server search is only the fallback, when the browser copy is unavailable or finds nothing
+  useEffect(() => {
+    if (!open || term.length < 2 || (local && local.length)) return
+    const ac = new AbortController()
+    const t = setTimeout(() => api<Hit[]>('/medicines?q=' + encodeURIComponent(term), { signal: ac.signal }).then(h => { setRemote(h); setErr('') }).catch(e => { if (e?.name !== 'AbortError') setErr(e?.message || 'Could not load medicines.') }), 120)
     return () => { clearTimeout(t); ac.abort() }
-  }, [q, open])
+  }, [open, term, local])
+  const usual = term.length >= 2 ? favs.filter(f => f.favourite && f.name.toLowerCase().includes(term.toLowerCase())).slice(0, 4) : []
+  const hits: Hit[] = term.length < 2 ? favs : [...usual, ...((local && local.length ? local : remote) as Hit[]).filter(h => !usual.some(u => u.name.toLowerCase() === h.name.toLowerCase()))].slice(0, 20)
+  useEffect(() => setHl(0), [term])
   useEffect(() => { const f = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }; document.addEventListener('mousedown', f); return () => document.removeEventListener('mousedown', f) }, [])
   const pick = (h: Hit | null) => {
     if (h) onPick(medFromHit(h))
     else if (q.trim().length >= 2) { onPick(medFromHit({ name: q.trim(), kind: 'custom' })); api('/medicines/custom', { body: { name: q.trim() } }).catch(() => {}) }
-    setQ(''); setHits([]); setOpen(false); inp.current?.focus()
+    setQ(''); setOpen(false); inp.current?.focus()
   }
-  const opts = q.trim().length >= 2 ? [...hits, null] : hits
+  const opts = term.length >= 2 ? [...hits, null] : hits
   return <div className="ac" ref={box}>
     <input ref={inp} className="inp" autoFocus={autoFocus} placeholder="Add medicine: type a brand or generic name (e.g. dolo, metformin 500)" value={q}
       onClick={() => setOpen(true)} onChange={e => { setQ(e.target.value); setOpen(true) }}
@@ -43,7 +64,7 @@ export default function MedSearch({ onPick, autoFocus }: { onPick: (m: Med) => v
       }} role="combobox" aria-expanded={open} aria-autocomplete="list" />
     {open && err && <div className="ac-list"><div className="small" style={{ padding: '10px 12px', color: '#B2261E' }}>{err}</div></div>}
     {open && !err && opts.length > 0 && <div className="ac-list" role="listbox">
-      {q.trim().length < 2 && <div className="tiny muted" style={{ padding: '6px 12px' }}>{hits.some(h => h.favourite) ? 'Your most used medicines' : 'Common medicines. Type 2 or more letters to search all 9,900.'}</div>}
+      {term.length < 2 && <div className="tiny muted" style={{ padding: '6px 12px' }}>{favs.some(h => h.favourite) ? 'Your most used medicines' : 'Common medicines. Type 2 or more letters to search all 9,900.'}</div>}
       {opts.map((h, i) => h ? <button type="button" key={h.name + i} className={'ac-item' + (i === hl ? ' hl' : '')} onMouseEnter={() => setHl(i)} onClick={() => pick(h)} role="option" aria-selected={i === hl}>
         <span className="grow"><span className="nm">{h.name}</span><br /><span className="meta">{h.favourite ? `Your usual: ${[h.defaults?.dose, h.defaults?.freq, h.defaults?.days ? h.defaults.days + ' days' : ''].filter(Boolean).join(', ')}` : [h.manufacturer, h.category, h.pack].filter(Boolean).join(', ')}</span></span>
         {h.favourite ? <span className="tag ink">Used {h.uses}×</span> : h.kind === 'ja' ? <span className="tag green">Jan Aushadhi{h.price ? ' ' + inr(h.price) : ''}</span> : h.kind === 'custom' ? <span className="tag">Added by you</span> : null}

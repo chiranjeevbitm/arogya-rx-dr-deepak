@@ -55,6 +55,8 @@ r.get('/ja', async c => {
   return c.json(rows[0] || null)
 })
 
+r.get('/custom', async c => c.json(await sql()`select name, form from arx.medicines where kind = 'custom' and clinic_id = ${me(c).clinic_id} order by name limit 2000`))
+
 r.post('/custom', requireAuth('doctor', 'admin'), async c => {
   const b = await body(c, z.object({ name: z.string().min(2).max(200) }))
   const [m] = await sql()`insert into arx.medicines (name, kind, form, clinic_id) values (${b.name}, 'custom', ${detectForm(b.name)}, ${me(c).clinic_id}) returning id, name, kind, form`

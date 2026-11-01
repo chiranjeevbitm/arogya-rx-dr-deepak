@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex } from '../lib/format'
-import { useAsync, useToast } from '../components/ui'
+import { useAsync, useLive, useToast } from '../components/ui'
 import Icon from '../components/Icon'
 import ConsultPane from './Consult'
 import Today, { AddToQueue } from './Today'
@@ -20,7 +20,21 @@ function DoctorOpd() {
   const { rxId } = useParams(), nav = useNavigate(), toast = useToast()
   const q = useAsync(() => api<Visit[]>('/visits'), [])
   const [adding, setAdding] = useState(false)
-  useEffect(() => { const t = setInterval(() => document.visibilityState === 'visible' && q.reload(), 20000); return () => clearInterval(t) }, []) // eslint-disable-line
+  useLive(q.reload, 4000)   // new tokens from reception show up on their own
+  const box = useRef<HTMLDivElement>(null)
+  const [sideW, setSideW] = useState(() => { try { return Math.max(280, Number(localStorage.getItem('arx.sideW')) || 420) } catch { return 420 } })
+  const setW = (w: number) => { const max = Math.max(320, (box.current?.clientWidth || 1400) - 420); const v = Math.round(Math.min(Math.max(w, 0), max)); setSideW(v); try { localStorage.setItem('arx.sideW', String(v)) } catch { /* private mode */ } }
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault(); const el = e.currentTarget; el.setPointerCapture(e.pointerId)
+    const move = (ev: PointerEvent) => { const r = box.current!.getBoundingClientRect(); setW(r.right - ev.clientX) }
+    const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up) }
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up)
+  }
+  const splitter = <div className="splitter" role="separator" aria-orientation="vertical" aria-label="Drag to resize the form and the parchi. Double-click to reset." title="Drag to resize · double-click to reset" tabIndex={0}
+    onPointerDown={drag} onDoubleClick={() => setW(420)}
+    onKeyDown={e => { if (e.key === 'ArrowLeft') setW(sideW + 40); if (e.key === 'ArrowRight') setW(sideW - 40) }} />
+  const wide = Math.round((box.current?.clientWidth || 1400) * 0.58)
+  const view = sideW <= 330 ? 'form' : sideW >= wide - 40 ? 'parchi' : 'split'
   const list = (q.data || []).filter(v => v.status !== 'cancelled').sort((a, b) => a.token - b.token)
   const open = async (v: Visit) => {
     if (v.rx_id && v.rx_id === rxId) return
@@ -34,9 +48,9 @@ function DoctorOpd() {
   return <div className="stack">
     <div className="page-h"><div className="grow"><h1>OPD &amp; Rx</h1><p>Call a token, tap a template or speak the consult. The parchi on the right is exactly what prints.</p></div>
       <button className="btn" onClick={() => setAdding(true)}><Icon n="plus" />Add patient</button></div>
-    <div className="opd">
+    <div className="opd" ref={box} style={{ ['--side-w' as any]: sideW + 'px' }}>
       <aside className="queue">
-        <h3><span>Tokens</span><span className="mono">{list.filter(v => v.status === 'done').length}/{list.length}</span></h3>
+        <h3><span>Tokens</span> <span className="mono">{list.filter(v => v.status === 'done').length}/{list.length}</span></h3>
         {list.length === 0 && <p className="small muted">No tokens yet today. Reception adds patients, or use Add patient.</p>}
         {list.map(v => {
           const on = !!rxId && v.rx_id === rxId
@@ -47,8 +61,12 @@ function DoctorOpd() {
               <span className="q-sub">{v.status === 'done' ? `Done${t ? ' · ' + fmtT(t) : ''}` : v.status === 'with_doctor' ? 'With doctor' : `${v.age_years ?? ''}${v.sex || ''}${v.complaint ? ' · ' + v.complaint : ''}`}</span></span>
           </button>
         })}
+        <span className="grow" />
+        <div className="seg view-seg" role="group" aria-label="Screen layout">
+          {([['form', 'Form', 300], ['split', 'Both', 420], ['parchi', 'Parchi', wide]] as const).map(([k, l, w]) => <button key={k} type="button" aria-pressed={view === k} onClick={() => setW(w)}>{l}</button>)}
+        </div>
       </aside>
-      {rxId ? <ConsultPane key={rxId} rxId={rxId} onChanged={q.reload} onNext={next} renderSide={el => <aside className="opd-side">{el}</aside>} />
+      {rxId ? <ConsultPane key={rxId} rxId={rxId} onChanged={q.reload} onNext={next} renderSide={el => <aside className="opd-side">{splitter}{el}</aside>} />
         : <><div className="opd-main">
             <div className="now-card">
               <div><div className="small" style={{ opacity: .8 }}>Waiting</div><div className="big">{waiting.length}</div></div>
@@ -56,7 +74,7 @@ function DoctorOpd() {
               <button className="btn lg" disabled={!waiting.length} onClick={next}>Call next patient</button>
             </div>
             <p className="muted small">Pick a token on the left to open the consult. Templates, voice, safety checks and the live parchi are all here.</p>
-          </div><aside className="opd-side"><div className="side-h"><b>Live parchi</b><span className="tag">opens with a token</span></div><div className="empty small">Call a token to start a prescription.</div></aside></>}
+          </div><aside className="opd-side">{splitter}<div className="side-h"><b>Live parchi</b><span className="tag">opens with a token</span></div><div className="empty small">Call a token to start a prescription.</div></aside></>}
     </div>
     {adding && <AddToQueue onClose={() => setAdding(false)} onDone={() => { setAdding(false); q.reload() }} />}
   </div>

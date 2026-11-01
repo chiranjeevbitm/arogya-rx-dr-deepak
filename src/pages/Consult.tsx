@@ -137,10 +137,13 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
         <div className="chips">{['Fever', 'Cough', 'Cold', 'Body ache', 'Headache', 'Burning urination', 'Acidity', 'Loose motions', 'Vomiting', 'Giddiness', 'Weakness', 'Breathlessness', 'Chest pain', 'Sugar follow-up', 'BP check'].map(c => <button key={c} type="button" className="chip" onClick={() => set('complaints', data.complaints ? data.complaints.replace(/\.?\s*$/, ', ') + c.toLowerCase() : c)}>+ {c}</button>)}</div>
       </fieldset>
 
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Vitals</span><span className="tag">flags update as you type</span></div>
+      <details className="sec">
+        <summary><h3>Vitals</h3><span className="small muted">{[v.bp && `BP ${v.bp}`, v.pulse && `Pulse ${v.pulse}`, v.temp && `Temp ${v.temp}`, v.spo2 && `SpO₂ ${v.spo2}`, v.grbs && `GRBS ${v.grbs}`, v.weight && `${v.weight} kg`].filter(Boolean).join(' · ') || 'Not recorded yet'}</span></summary>
+      <fieldset className="sec-b fs" disabled={ro}>
         <div className="vitals">{([['bp', 'BP', '120/80'], ['pulse', 'Pulse', '72'], ['temp', 'Temp °F', '98.6'], ['spo2', 'SpO₂ %', '98'], ['rr', 'RR', '16'], ['grbs', 'GRBS', '110'], ['weight', 'Weight kg', '60']] as const).map(([k, l, ph]) =>
           <Field key={k} label={l}><input className={'inp sm mono ' + vitalFlag(k, v[k])} value={v[k] || ''} placeholder={ph} inputMode={k === 'bp' ? 'text' : 'decimal'} onChange={e => setV(k, e.target.value)} /></Field>)}</div>
       </fieldset>
+      </details>
 
       <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-dx">Diagnosis · one-tap templates</label></div>
         <div className="chips">{templates.map(t => <button key={t.id} type="button" className="chip" onClick={() => applyTemplate(t)}>{t.name} <span className="faint tiny">{t.data.meds.length} Rx</span></button>)}</div>
@@ -155,6 +158,9 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
         {cost.known > 0 && <div className="cost"><div><span>Branded</span><b>{inr(cost.branded)}</b></div><div><span>Jan Aushadhi</span><b>{inr(cost.jan)}</b></div><div className="save"><span>Patient saves</span><b>{inr(cost.save)}</b></div></div>}
       </fieldset>
 
+      <details className="sec">
+        <summary><h3>Investigations and advice</h3><span className="small muted">{[(data.investigations || []).length ? `${(data.investigations || []).length} test${(data.investigations || []).length > 1 ? 's' : ''}` : '', (data.advice || []).length ? `${(data.advice || []).length} advice` : ''].filter(Boolean).join(' · ') || 'None added'}</span></summary>
+        <div className="sec-b">
       <div className="two">
         <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Investigations</span></div>
           <TagInput value={data.investigations || []} onChange={x => set('investigations', x)} placeholder="Add a test" suggestions={COMMON_INVESTIGATIONS.slice(0, 18)} /></fieldset>
@@ -163,6 +169,8 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
           <TagInput value={(data.advice || []).filter(a => !ADVICE_PRESETS.some(p => p.en === a))} onChange={x => set('advice', [...(data.advice || []).filter(a => ADVICE_PRESETS.some(p => p.en === a)), ...x])} placeholder="Other advice, press Enter" />
         </fieldset>
       </div>
+        </div>
+      </details>
 
       <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Follow-up</span></div>
         <div className="row wrap"><div className="chips">{[0, 3, 5, 7, 10, 14, 30, 60, 90].map(d => <button key={d} type="button" className={'chip' + ((data.follow_up?.days || 0) === d ? ' on' : '')} onClick={() => set('follow_up', { ...(data.follow_up || {}), days: d || null })}>{d ? (d < 30 ? `${d} days` : `${d / 30} month${d > 30 ? 's' : ''}`) : 'None'}</button>)}</div>

@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex, inr, istToday } from '../lib/format'
-import { Modal, Spinner, useAsync, useToast, Field } from '../components/ui'
+import { Modal, Spinner, useAsync, useLive, useToast, Field } from '../components/ui'
 import { PatientPicker, type Patient, type NewPatient } from '../components/PatientPicker'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
@@ -21,7 +21,7 @@ export default function Today() {
   const ap = useAsync(() => api<Appt[]>('/appointments'), [])
   const [adding, setAdding] = useState(false), [billFor, setBillFor] = useState<Visit | null>(null), [receipt, setReceipt] = useState<string | null>(null), [vitalsFor, setVitalsFor] = useState<Visit | null>(null)
   const reload = () => { q.reload(); sum.reload(); ap.reload() }
-  useEffect(() => { const t = setInterval(() => { if (document.visibilityState === 'visible') { q.reload(); ap.reload() } }, 20000); return () => clearInterval(t) }, []) // eslint-disable-line
+  useLive(() => { q.reload(); ap.reload() }, 5000)
 
   const open = async (v: Visit) => {
     if (!isDoc) return nav(`/patients/${v.patient_id}`)
