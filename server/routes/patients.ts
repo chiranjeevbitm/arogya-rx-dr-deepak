@@ -56,17 +56,18 @@ r.post('/', async c => {
   return c.json(p)
 })
 
-export async function patientDetail(cid: string, id: string) {
-  const db = sql()
+/** `light` (used when opening a consult): only what the consult screen shows, and the 40 most recent prescriptions. */
+export async function patientDetail(cid: string, id: string, light = false) {
+  const db = sql(), none = Promise.resolve([] as any[])
   const [[p], visits, rxs, docs, labs, bills, appts] = await Promise.all([
     db`select * from arx.patients where id = ${id} and clinic_id = ${cid}`,
-    db`select id, visit_date, token, status, visit_type, complaint from arx.visits where patient_id = ${id} order by visit_date desc, token desc limit 100`,
+    light ? none : db`select id, visit_date, token, status, visit_type, complaint from arx.visits where patient_id = ${id} order by visit_date desc, token desc limit 100`,
     db`select id, rx_date, status, data->>'diagnosis' as diagnosis, data->>'complaints' as complaints, data->'vitals' as vitals, jsonb_array_length(meds) as med_count, meds, legacy_id is not null as imported
-       from arx.prescriptions where patient_id = ${id} and clinic_id = ${cid} order by rx_date desc, created_at desc limit 200`,
-    db`select id, kind, doc_date, extracted, file_id, created_at from arx.documents where patient_id = ${id} and clinic_id = ${cid} order by created_at desc`,
+       from arx.prescriptions where patient_id = ${id} and clinic_id = ${cid} order by rx_date desc, created_at desc limit ${light ? 40 : 200}`,
+    light ? none : db`select id, kind, doc_date, extracted, file_id, created_at from arx.documents where patient_id = ${id} and clinic_id = ${cid} order by created_at desc`,
     db`select id, test, value_num::float as value_num, value_text, unit, flag, result_date, source from arx.lab_results where patient_id = ${id} and clinic_id = ${cid} order by result_date`,
     db`select id, bill_no, total::float, paid::float, mode, status, bill_date from arx.bills where patient_id = ${id} and clinic_id = ${cid} order by created_at desc limit 50`,
-    db`select id, appt_date, appt_time, status, reason, source from arx.appointments where patient_id = ${id} and clinic_id = ${cid} and appt_date >= ${istToday()} order by appt_date`,
+    light ? none : db`select id, appt_date, appt_time, status, reason, source from arx.appointments where patient_id = ${id} and clinic_id = ${cid} and appt_date >= ${istToday()} order by appt_date`,
   ])
   if (!p) throw new HttpError(404, 'Patient not found.')
   return { patient: p, visits, prescriptions: rxs, documents: docs, labs, bills, upcoming: appts }

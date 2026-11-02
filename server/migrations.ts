@@ -326,4 +326,19 @@ create index med_usage_pinned on arx.med_usage (clinic_id) where pinned;
 update arx.clinics set settings = jsonb_set(settings, '{letterhead,ink}', '"#16295f"') where settings #>> '{letterhead,ink}' = '#1d3a8a';
 `,
   },
+  {
+    version: 5,
+    name: 'hot_path_indexes',
+    // The OPD list, adding a token and opening a consult look up "this patient's last final prescription" and
+    // "this visit's bill" without clinic_id; the old composite index starts with clinic_id, so each lookup scanned the
+    // whole prescriptions table (thousands of imported rows) once per patient in the queue, on every 10 s refresh.
+    sql: /* sql */ `
+create index if not exists rx_patient_status_idx on arx.prescriptions (patient_id, status, rx_date desc);
+create index if not exists bills_visit_idx on arx.bills (visit_id);
+analyze arx.prescriptions;
+analyze arx.bills;
+analyze arx.visits;
+analyze arx.patients;
+`,
+  },
 ]

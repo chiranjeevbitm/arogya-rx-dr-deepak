@@ -58,7 +58,7 @@ app.use('*', async (c, next) => {
   })()
   work.catch(() => {})   // after a timeout the late failure is already answered; do not let it surface as an unhandled rejection
   try {
-    await Promise.race([work, new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('request timed out waiting for the database'), { code: 'CONNECTION_CONNECT_TIMEOUT' })), budget) })])
+    await Promise.race([work, new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('request timed out waiting for the database'), { code: 'REQUEST_TIMEOUT' })), budget) })])
   } finally {
     clearTimeout(timer)
     markDbUse()
@@ -94,6 +94,11 @@ app.onError((e, c) => {
   const pg = e as any
   if (pg?.code === '23505') return c.json({ error: 'This already exists.' }, 409)
   if (pg?.code === '22P02') return c.json({ error: 'Invalid id.' }, 400)
+  // the database is overloaded or a query ran too long: do not throw connections away (reconnecting adds load), do not retry
+  if (pg?.code === 'REQUEST_TIMEOUT' || pg?.code === '57014') {
+    console.error('[api] slow request', pg.code, c.req.method, c.req.path)
+    return c.json({ error: 'The database is slow to answer right now. Please try again in a moment.', code: 'DB_BUSY' }, 503)
+  }
   if (isDeadConnection(pg)) {
     resetDb(c.get('dbGen'))
     console.error('[api] dead db connection', pg?.code || pg?.errno, c.req.method, c.req.path)

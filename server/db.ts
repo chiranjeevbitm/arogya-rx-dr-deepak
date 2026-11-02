@@ -76,7 +76,7 @@ async function migrate() {
   const db = sql()
   // fast path (almost every cold start): the newest migration is already applied, so skip the locked transaction
   let upToDate = false
-  try { upToDate = (await db`select 1 from arx.schema_migrations where version = ${MIGRATIONS[MIGRATIONS.length - 1].version}`).length > 0 } catch { /* first run: table missing */ }
+  try { upToDate = (await db`select 1 from arx.schema_migrations where version = ${MIGRATIONS[MIGRATIONS.length - 1].version}`).length > 0 } catch (e: any) { if (e?.code !== '42P01' && e?.code !== '3F000') throw e /* only a missing table means first run */ }
   if (!upToDate) await db.begin(async tx => {
     await tx`select pg_advisory_xact_lock(727274)`
     await tx`create schema if not exists arx`

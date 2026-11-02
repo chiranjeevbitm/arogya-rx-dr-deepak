@@ -25,6 +25,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
       break
     } catch (e: any) {
       if (e?.name === 'AbortError' && !timedOut) throw e
+      if (timedOut) { lastErr = new ApiError(0, 'The server is taking too long. Wait a moment and try again.'); break }   // a slow server is not helped by sending the same request again
       lastErr = timedOut ? new ApiError(0, 'The server is taking too long. Wait a moment and try again.') : new ApiError(0, 'No internet connection. Your work is kept on this screen; try again when you are back online.')
     } finally { clearTimeout(timer); opts.signal?.removeEventListener('abort', onAbort) }
   }
@@ -32,7 +33,8 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   logTiming(path, t0, r)
   const text = await r.text()
   // the server dropped a stale database connection and reset it: one safe retry for reads and AI drafts
-  if (r.status === 503 && /DB_RETRY/.test(text) && (method === 'GET' || path.startsWith('/ai/')) && !(opts as any)._retried) return api<T>(path, { ...opts, _retried: true } as any)
+  // (reads are already retried once on the server; only AI drafts are retried here, after their long wait)
+  if (r.status === 503 && /DB_RETRY/.test(text) && path.startsWith('/ai/') && !(opts as any)._retried) return api<T>(path, { ...opts, _retried: true } as any)
   let j: any = null
   try { j = text ? JSON.parse(text) : null } catch { j = { error: text } }
   if (!r.ok) {

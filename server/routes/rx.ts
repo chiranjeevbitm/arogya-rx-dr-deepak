@@ -45,7 +45,7 @@ r.get('/:id', async c => {
   const cid = me(c).clinic_id, id = P(c, 'id')
   const b = await rxBundle(cid, id)
   if (c.req.query('history') !== '1') return c.json(b)
-  return c.json({ ...b, history: await patientDetail(cid, b.rx.patient_id) })
+  return c.json({ ...b, history: await patientDetail(cid, b.rx.patient_id, true) })
 })
 
 /** New prescription for a patient outside the queue (e.g. reprint, phone consult). */
