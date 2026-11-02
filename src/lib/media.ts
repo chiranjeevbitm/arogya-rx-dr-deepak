@@ -88,7 +88,9 @@ const SILENT_HELP = 'Choose another microphone in the list, check it is plugged 
 
 /** Record audio for server-side transcription (works in any browser with a microphone, including iPhone Safari).
     onLevel gets the loudness 0..1 many times a second. Uses the microphone chosen in the voice window, if any. */
-export async function recordAudio(onLevel?: (v: number) => void): Promise<{ label: string; stop: () => Promise<{ base64: string; mime: string; seconds: number; bytes: number }> }> {
+export type Recorded = { base64: string; mime: string; seconds: number; bytes: number; pcm?: Int16Array }
+/** pcm: also capture 16 kHz mono 16-bit PCM (for Murf speech to text) next to the small compressed file. */
+export async function recordAudio(onLevel?: (v: number) => void, opts: { pcm?: boolean } = {}): Promise<{ label: string; stop: () => Promise<Recorded> }> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw Object.assign(new Error('unsupported'), { name: 'NotSupportedError' })
   const base = { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, id = savedMic()
   let stream: MediaStream
@@ -97,15 +99,23 @@ export async function recordAudio(onLevel?: (v: number) => void): Promise<{ labe
   const track = stream.getAudioTracks()[0], label = track?.label || 'the microphone'
   console.info('[voice] recording from', label, { muted: track?.muted, state: track?.readyState, settings: track?.getSettings?.() })
   // loudness meter, so the doctor can see the microphone is hearing him
-  let ac: AudioContext | null = null, raf = 0, peak = 0
+  let ac: AudioContext | null = null, raf = 0, peak = 0, sp: ScriptProcessorNode | null = null
+  const raw: Float32Array[] = []
   try {
     ac = new AudioContext(); if (ac.state === 'suspended') await ac.resume().catch(() => {})
     const an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(stream).connect(an)
     const buf = new Uint8Array(an.fftSize)
     const tick = () => { an.getByteTimeDomainData(buf); let m = 0; for (const x of buf) m = Math.max(m, Math.abs(x - 128)); const v = Math.min(1, m / 64); if (v > peak) peak = v; onLevel?.(v); raf = requestAnimationFrame(tick) }
     tick()
+    if (opts.pcm) {
+      // raw samples at the device rate; turned into 16 kHz on Stop (a muted gain keeps the node running without playing back)
+      sp = ac.createScriptProcessor(4096, 1, 1); const mute = ac.createGain(); mute.gain.value = 0
+      sp.onaudioprocess = e => { raw.push(new Float32Array(e.inputBuffer.getChannelData(0))) }
+      ac.createMediaStreamSource(stream).connect(sp); sp.connect(mute); mute.connect(ac.destination)
+    }
   } catch { /* no meter, recording still works */ }
-  const cleanup = () => { cancelAnimationFrame(raf); try { ac?.close() } catch { /* ignore */ } stream.getTracks().forEach(t => t.stop()) }
+  const rate = ac?.sampleRate || 48000
+  const cleanup = () => { cancelAnimationFrame(raf); try { sp?.disconnect() } catch { /* ignore */ } try { ac?.close() } catch { /* ignore */ } stream.getTracks().forEach(t => t.stop()) }
   const pick = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m))
   let rec: MediaRecorder
   // speech only, kept very small: mono Opus at 16 kbps is about 120 KB a minute and still clear for transcription
@@ -125,11 +135,39 @@ export async function recordAudio(onLevel?: (v: number) => void): Promise<{ labe
       if (b.size < 1500 || muted || (ac && peak < 0.01)) return rej(Object.assign(new Error(`No sound came from "${label}". ${SILENT_HELP}`), { name: 'NoAudio' }))
       const buf = new Uint8Array(await b.arrayBuffer()); let s = ''
       for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000))
-      res({ base64: btoa(s), mime, seconds: Math.round((Date.now() - t0) / 100) / 10, bytes: b.size })
+      res({ base64: btoa(s), mime, seconds: Math.round((Date.now() - t0) / 100) / 10, bytes: b.size, ...(opts.pcm ? { pcm: to16k(raw, rate) } : {}) })
     }
     try { rec.stop() } catch { cleanup(); rej(new Error('Nothing was recorded.')) }
   }) }
 }
+
+/** Float samples at `rate` → 16 kHz 16-bit PCM (averaging each output sample's window, which also filters out hiss). */
+export function to16k(chunks: Float32Array[], rate: number): Int16Array {
+  let n = 0; for (const c of chunks) n += c.length
+  const all = new Float32Array(n); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length }
+  const step = rate / 16000, out = new Int16Array(Math.floor(n / step))
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * step), b = Math.max(a + 1, Math.floor((i + 1) * step)); let sum = 0
+    for (let k = a; k < b && k < n; k++) sum += all[k]
+    const v = Math.max(-1, Math.min(1, sum / (b - a))); out[i] = v < 0 ? v * 0x8000 : v * 0x7fff
+  }
+  return out
+}
+
+/** Split 16 kHz PCM into pieces of at most `maxSec`, cutting at the quietest 100 ms in the last 6 s of each piece. */
+export function splitPcm(pcm: Int16Array, maxSec = 45): Int16Array[] {
+  const R = 16000, max = maxSec * R, win = R / 10, out: Int16Array[] = []
+  let start = 0
+  while (pcm.length - start > max) {
+    let best = start + max, bestE = Infinity
+    for (let w = start + max - 6 * R; w + win <= start + max; w += win) { let e = 0; for (let k = w; k < w + win; k++) e += Math.abs(pcm[k]); if (e < bestE) { bestE = e; best = w + win / 2 } }
+    out.push(pcm.subarray(start, best)); start = best
+  }
+  out.push(pcm.subarray(start))
+  return out
+}
+
+export function b64(bytes: Uint8Array): string { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s) }
 
 /** Open the chosen microphone for a few seconds only to show its level (the "Test microphone" button). */
 export async function testMic(onLevel: (v: number) => void, ms = 4000): Promise<{ label: string; peak: number }> {

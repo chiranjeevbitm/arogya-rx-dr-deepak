@@ -7,6 +7,7 @@ import { rateLimit } from '../lib/ratelimit.js'
 import { audit, clientIp } from '../lib/audit.js'
 import { mergeSettings } from '../../shared/settings.js'
 import { aiConfigured, aiModel, aiProviders } from '../lib/ai.js'
+import { murfConfigured } from '../lib/murf.js'
 import { waApiConfigured } from '../lib/whatsapp.js'
 import { storageMode } from '../lib/storage.js'
 import { normPhone } from '../../shared/rx.js'
@@ -49,7 +50,7 @@ r.get('/me', async c => {
   return c.json({
     user: u,
     clinic: { id: cl.id, slug: cl.slug, name: cl.name, settings: mergeSettings(cl.settings) },
-    features: { ai: aiConfigured(), ai_model: aiModel(), ai_providers: aiProviders(), voice: true, whatsapp_api: waApiConfigured(), storage: storageMode() },
+    features: { ai: aiConfigured(), ai_model: aiModel(), ai_providers: aiProviders(), voice: true, stt: murfConfigured() ? 'murf' : 'server', whatsapp_api: waApiConfigured(), storage: storageMode() },
   })
 })
 
