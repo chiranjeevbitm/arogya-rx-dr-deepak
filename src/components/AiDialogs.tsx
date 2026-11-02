@@ -137,3 +137,55 @@ export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string;
     </div>}
   </Modal>
 }
+
+export type IntakeFields = { name: string; sex: 'M' | 'F' | 'O' | null; age_years: number | null; phone: string; address: string; allergies: string[] }
+
+/** New patient: say the details out loud, or photograph a registration slip / old parchi header. Nothing is saved; it only fills the form. */
+export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'photo'; onClose: () => void; onFilled: (f: IntakeFields) => void }) {
+  const toast = useToast()
+  const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
+  const [text, setText] = useState(''), [interim, setInterim] = useState(''), [rec, setRec] = useState<'idle' | 'live' | 'audio'>('idle')
+  const [busy, setBusy] = useState(false), secs = useElapsed(busy), [preview, setPreview] = useState('')
+  const stopRef = useRef<{ stop: () => any } | null>(null), base = useRef(''), file = useRef<HTMLInputElement>(null)
+  useEffect(() => () => { stopRef.current?.stop() }, [])
+  const send = async (body: { transcript?: string; image?: string }) => {
+    setBusy(true)
+    try {
+      const f = await api<IntakeFields>('/ai/patient-intake', { body })
+      if (!f.name && !f.phone && f.age_years == null) { toast(mode === 'voice' ? 'Could not pick out any patient details. Try again, or type them.' : 'Could not read any patient details from this photo. Try a clearer photo, or type them.', 'err'); return }
+      onFilled(f)
+    } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) }
+  }
+  const start = async () => {
+    base.current = text ? text + ' ' : ''
+    const r = startDictation(lang, (f, i) => { setText(base.current + f); setInterim(i) }, err => { setRec('idle'); setInterim(''); if (err) toast(err, 'err') })
+    if (r) { stopRef.current = r; setRec('live'); return }
+    try { const a = await recordAudio(); stopRef.current = { stop: async () => { const { base64, mime } = await a.stop(); setBusy(true); try { const t = await api<{ text: string }>('/ai/transcribe', { body: { audio_base64: base64, mime } }); setText(x => (x ? x + ' ' : '') + t.text) } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) } } }; setRec('audio') }
+    catch { toast('Microphone is not available on this device.', 'err') }
+  }
+  const stop = () => { stopRef.current?.stop(); stopRef.current = null; setRec('idle'); setInterim('') }
+  const go = async (f: File) => { try { const img = await compressImage(f); setPreview(img); await send({ image: img }) } catch (e: any) { toast(e.message, 'err') } }
+  if (mode === 'photo') return <Modal title="Fill from a photo" width={520} onClose={onClose}>
+    <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && go(e.target.files[0])} />
+    <div className="stack" style={{ alignItems: 'center', padding: '12px 0' }}>
+      {preview && <img src={preview} alt="" style={{ maxHeight: 220, borderRadius: 8 }} />}
+      <button className="btn primary lg" disabled={busy} onClick={() => file.current?.click()}><Icon n="cam" />{busy ? `Reading… ${secs} s (usually under 20)` : 'Take or choose a photo'}</button>
+      <p className="small muted" style={{ textAlign: 'center', maxWidth: 380 }}>A registration slip, the top of an old parchi, or an ID card. You check every field before saving; nothing is saved from here.</p>
+    </div>
+  </Modal>
+  return <Modal title="Fill by speaking" width={560} onClose={() => { stop(); onClose() }} footer={<>
+    <span className="grow small muted">You check every field before saving.</span>
+    <button className="btn primary" disabled={busy || text.trim().length < 3} onClick={() => { stop(); send({ transcript: text }) }}>{busy ? `Filling… ${secs} s` : 'Fill the form'}</button>
+  </>}>
+    <div className="stack">
+      <div className="row wrap">
+        <div className="seg"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={rec !== 'idle'}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={rec !== 'idle'}>English</button></div>
+        <span className="grow" />
+        {rec === 'idle' ? <button className="btn primary lg" onClick={start}><Icon n="mic" />Start speaking</button>
+          : <button className="btn danger lg" onClick={stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop</button>}
+      </div>
+      <textarea className="inp" rows={4} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Ramesh Kumar, 45 saal, male, mobile 98765 43210, gaon Bochaha, Muzaffarpur. Sulfa se allergy hai." />
+      {rec === 'audio' && <div className="alert info small">Recording. This browser has no live speech, so the audio is turned into text when you press Stop.</div>}
+    </div>
+  </Modal>
+}

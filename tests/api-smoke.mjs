@@ -31,6 +31,9 @@ r = await fetch(B + '/api/patients', { method: 'POST', headers: { 'Content-Type'
 r = await call('GET', '/api/medicines?q=metformin', null, 'doctor'); ok(r.j.length > 3 && /metformin/i.test(r.j[0].name), 'medicine search: metformin', r.j.slice?.(0, 3))
 r = await call('GET', '/api/medicines?q=dolo 65', null, 'doctor'); ok(r.j.length > 0, 'medicine search: brand prefix "dolo 65"', r.j.slice?.(0, 3))
 r = await call('GET', '/api/medicines?q=paracetmol', null, 'doctor'); ok(r.j.some(x => /paracetamol/i.test(x.name)), 'fuzzy search handles a typo (paracetmol)', r.j.slice?.(0, 3))
+r = await call('POST', '/api/ai/patient-intake', {}, 'doctor'); ok(r.status === 400, 'patient intake with nothing is rejected', r)
+r = await call('POST', '/api/ai/patient-intake', { image: 'data:text/plain;base64,AAAA' }, 'doctor'); ok(r.status === 400, 'patient intake rejects a non-image', r)
+r = await call('POST', '/api/ai/patient-intake', { transcript: 'Ramesh Kumar 45 saal' }, 'reception'); ok(r.status !== 403 && r.status !== 401, 'reception may use patient intake (not blocked by role)', r)
 r = await call('GET', '/api/medicines/ja?name=' + encodeURIComponent('Telmisartan 40 mg Tablet'), null, 'doctor'); ok(r.j && /telmisartan/i.test(r.j.name), 'Jan Aushadhi alternative found', r.j)
 
 // reception registers a new patient into the queue

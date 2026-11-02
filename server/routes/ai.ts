@@ -120,6 +120,42 @@ r.post('/scan', async c => {
   return c.json({ document_id: doc.id, file_id: file.id, ...out, doc_date: docDate })
 })
 
+const INTAKE_SCHEMA = S({
+  name: { ...str, description: 'Full name of the patient, properly capitalised. Empty if not given.' },
+  sex: { type: 'string', enum: ['M', 'F', 'O', ''] },
+  age_years: { type: ['integer', 'null'] },
+  phone: { ...str, description: '10 digit Indian mobile number, digits only. Empty if not given.' },
+  address: { ...str, description: 'Village, town or area as given. Empty if not given.' },
+  allergies: { type: 'array', items: str },
+})
+const INTAKE_SYSTEM = `You fill a new-patient registration form for an Indian clinic from either (a) a few words spoken by the receptionist or doctor (Hinglish or Hindi or English) or (b) a phone photo of a handwritten or printed registration slip, an old prescription header, or an ID card.
+Rules:
+- Extract only what is actually said or written. Never invent a name, number or address. Leave fields empty ("" or null) when not present.
+- Names: write in English letters, properly capitalised, keep "Mr/Mrs/Dr" out of the name. Hindi names in Devanagari are transliterated.
+- Sex: M, F or O only when stated or clearly implied (for example "beti", "mahila", "Smt", "Mrs", "S/o", "D/o", "W/o").
+- Age: whole years. "6 mahine" is 0; "dedh saal" is 1. If a date of birth is written, work out the age in years from today's date given below.
+- Phone: digits only, drop +91 or a leading 0; keep it only if it ends up 10 digits.
+- Address: village or town and district if given, as one short line.
+- Allergies only if explicitly mentioned (for example "sulfa se allergy"). Do not guess.`
+
+r.post('/patient-intake', async c => {
+  const b = await body(c, z.object({ transcript: z.string().max(4000).optional(), image: z.string().max(8_000_000).optional() }))
+  const u = me(c)
+  await rateLimit(`ai:${u.id}`, 120, 3600)
+  const parts: any[] = [{ type: 'input_text', text: `Today is ${istToday()}.` }]
+  if (b.image) {
+    if (!/^data:image\/(jpeg|png|webp);base64,/.test(b.image)) throw new HttpError(400, 'Send a JPG, PNG or WebP photo.')
+    parts.push({ type: 'input_text', text: 'Read the patient details from this photo.' }, { type: 'input_image', image_url: b.image, detail: 'high' })
+  } else if (b.transcript && b.transcript.trim().length >= 3) {
+    parts.push({ type: 'input_text', text: `Spoken:\n"""${b.transcript.trim()}"""` })
+  } else throw new HttpError(400, 'Nothing was heard. Try again.')
+  const out = await aiJson<any>({ kind: 'patient_intake', clinicId: u.clinic_id, userId: u.id, system: INTAKE_SYSTEM, schemaName: 'patient_form', schema: INTAKE_SCHEMA, effort: 'low', maxTokens: 2000, parts })
+  const phone = String(out.phone || '').replace(/\D/g, '').slice(-10)
+  const age = Number.isInteger(out.age_years) && out.age_years >= 0 && out.age_years <= 125 ? out.age_years : null
+  await audit(c, 'ai.patient_intake', 'patient', null, { via: b.image ? 'photo' : 'voice' })
+  return c.json({ name: String(out.name || '').trim().slice(0, 80), sex: ['M', 'F', 'O'].includes(out.sex) ? out.sex : null, age_years: age, phone: phone.length === 10 ? phone : '', address: String(out.address || '').trim().slice(0, 200), allergies: (out.allergies || []).map((x: string) => String(x).trim()).filter(Boolean).slice(0, 10) })
+})
+
 r.delete('/documents/:id', async c => {
   await sql()`delete from arx.documents where id = ${P(c, 'id')} and clinic_id = ${me(c).clinic_id}`
   await audit(c, 'document.delete', 'document', P(c, 'id'))
