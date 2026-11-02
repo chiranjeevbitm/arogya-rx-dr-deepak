@@ -15,7 +15,13 @@ const fmtT = (s: number) => Math.floor(s / 60) + ':' + String(Math.round(s % 60)
 
 export default function Opd() {
   const me = useMe()
-  return me.user.role === 'reception' ? <Today /> : <DoctorOpd />
+  const [sp, setSp] = useSearchParams()
+  if (me.user.role !== 'reception') return <DoctorOpd />
+  const dash = sp.get('view') === 'dashboard'
+  return <>
+    <div className="seg" role="group" aria-label="Screen" style={{ margin: '0 0 12px' }}><button type="button" aria-pressed={!dash} onClick={() => setSp({})}>Today</button><button type="button" aria-pressed={dash} onClick={() => setSp({ view: 'dashboard' })}>Dashboard</button></div>
+    {dash ? <OpdDashboard /> : <Today />}
+  </>
 }
 
 function DoctorOpd() {

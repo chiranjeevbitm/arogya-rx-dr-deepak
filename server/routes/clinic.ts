@@ -79,7 +79,7 @@ r.get('/audit', requireAuth('doctor', 'admin'), async c => {
 })
 
 /** OPD dashboard: visits and patients by month (last 12 months), and a breakdown of one month. No money figures. */
-r.get('/dashboard', requireAuth('doctor', 'admin'), async c => {
+r.get('/dashboard', requireAuth(), async c => {
   const cid = me(c).clinic_id, db = sql()
   const month = /^\d{4}-\d{2}$/.test(c.req.query('month') || '') ? c.req.query('month')! : null
   if (!month) {

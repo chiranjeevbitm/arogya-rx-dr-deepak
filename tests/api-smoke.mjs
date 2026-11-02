@@ -106,7 +106,7 @@ r = await call('GET', `/api/appointments?from=${tomorrow}&to=${tomorrow}`, null,
   ok(r.j.totals?.visits >= 5 && !JSON.stringify(r.j).match(/fee|paid|amount|rupee/i), 'dashboard has counts and no money fields', r.j.totals)
   r = await call('GET', '/api/clinic/dashboard?month=2026-03', null, 'doctor')
   ok(r.status === 200 && r.j.daily?.length === 2 && r.j.session?.some(x => x.k === 'pm' && x.n === 1) && r.j.places?.[0]?.k === 'Testpur', 'dashboard month detail', r.j)
-  r = await call('GET', '/api/clinic/dashboard', null, 'reception'); ok(r.status === 403, 'reception cannot open the dashboard data', r)
+  r = await call('GET', '/api/clinic/dashboard', null, 'reception'); ok(r.status === 200 && !JSON.stringify(r.j).match(/paid|fee|amount/i), 'reception can open the dashboard data (no money)', r)
 }
 r = await call('GET', '/api/import/old/status', null, 'doctor'); ok(r.j.old_prescriptions === 3, 'old DB reachable: 3 prescriptions', r)
 r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 3 && r.j.patients_created === 2 && r.j.done, 'import: 3 prescriptions, 2 patients (Ramesh deduped by OP no)', r.j)
