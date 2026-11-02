@@ -341,4 +341,32 @@ analyze arx.visits;
 analyze arx.patients;
 `,
   },
+  {
+    version: 6,
+    name: 'voice_recordings',
+    // Voice dictations kept as small Opus files (about 16 kbps, mono) in the private bucket; only the doctor can play them.
+    sql: /* sql */ `
+alter table arx.files drop constraint if exists files_kind_check;
+alter table arx.files add constraint files_kind_check check (kind in ('rx_pdf','scan','receipt_pdf','logo','signature','other','voice'));
+create table arx.recordings (
+  id          uuid primary key default gen_random_uuid(),
+  clinic_id   uuid not null references arx.clinics(id) on delete cascade,
+  patient_id  uuid references arx.patients(id) on delete cascade,
+  rx_id       uuid references arx.prescriptions(id) on delete set null,
+  file_id     uuid not null references arx.files(id) on delete cascade,
+  kind        text not null check (kind in ('consult','intake')),
+  mime        text not null,
+  bytes       integer not null,
+  seconds     numeric(7,1),
+  transcript  text,
+  created_by  uuid references arx.users(id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+create index recordings_patient_idx on arx.recordings (clinic_id, patient_id, created_at desc);
+create index recordings_clinic_idx on arx.recordings (clinic_id, created_at desc);
+alter table arx.recordings enable row level security;
+create policy server_all on arx.recordings to current_user using (true) with check (true);
+do $$ begin if exists (select 1 from pg_roles where rolname = 'anon') then execute 'revoke all on arx.recordings from anon, authenticated'; end if; end $$;
+`,
+  },
 ]

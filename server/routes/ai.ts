@@ -7,6 +7,7 @@ import { audit } from '../lib/audit.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { aiJson, aiConfigured, aiModel, aiProviders, aiCheck, transcribe } from '../lib/ai.js'
 import { basicParse, trigramSim } from '../../shared/basicRx.js'
+import { saveRecording, RecordingMeta } from './recordings.js'
 import { putFile } from '../lib/storage.js'
 import { detectForm, defaultDose, defaultRoute, normFreq, istToday } from '../../shared/rx.js'
 
@@ -123,9 +124,17 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
 })
 
 r.post('/transcribe', async c => {
-  const b = await body(c, z.object({ audio_base64: z.string().max(14_000_000), mime: z.string().max(60), lang: z.enum(['hi', 'en']).optional() }))
-  await rateLimit(`ai:${me(c).id}`, 120, 3600)
-  return c.json({ text: await transcribe(Buffer.from(b.audio_base64, 'base64'), b.mime, b.lang || 'hi') })
+  const b = await body(c, z.object({ audio_base64: z.string().max(14_000_000), mime: z.string().max(60), lang: z.enum(['hi', 'en']).optional(), keep: RecordingMeta.optional() }))
+  const u = me(c)
+  await rateLimit(`ai:${u.id}`, 120, 3600)
+  const audio = Buffer.from(b.audio_base64, 'base64')
+  // keep the recording even if speech-to-text fails, so nothing the doctor said is lost
+  let text = '', err: any = null
+  try { text = await transcribe(audio, b.mime, b.lang || 'hi') } catch (e) { err = e }
+  let recording_id: string | null = null
+  if (b.keep) try { recording_id = await saveRecording(u.clinic_id, u.id, audio, b.mime, { ...b.keep, transcript: text || undefined }) } catch (e: any) { console.warn('[recordings] not saved', e?.message) }
+  if (err) { if (recording_id) err.message = `${err.message} The recording was saved.`; throw err }
+  return c.json({ text, recording_id })
 })
 
 const SCAN_SCHEMA = S({

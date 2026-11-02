@@ -48,4 +48,14 @@ export async function getFile(id: string, clinicId?: string) {
   return { mime: f.mime as string, data: Buffer.from(await r.arrayBuffer()), name: f.path.split('/').pop() as string }
 }
 
-function extFor(m: string) { return ({ 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as Record<string, string>)[m] || 'bin' }
+/** Delete a file from the bucket (or the database) and its row. */
+export async function removeFile(id: string, clinicId: string) {
+  const [f] = await sql()`delete from arx.files where id = ${id} and clinic_id = ${clinicId} returning storage, path`
+  if (f?.storage === 'supabase') {
+    const { url } = cfg()
+    const r = await fetch(`${url}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ prefixes: [f.path] }) })
+    if (!r.ok) console.warn('[storage] could not delete', f.path, r.status)
+  }
+}
+
+function extFor(m: string) { return ({ 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a' } as Record<string, string>)[m] || 'bin' }

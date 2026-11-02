@@ -112,16 +112,18 @@ r = await call('GET', `/api/appointments?from=${tomorrow}&to=${tomorrow}`, null,
   ok(r.status === 200 && r.j.daily?.length === 2 && r.j.session?.some(x => x.k === 'pm' && x.n === 1) && r.j.places?.[0]?.k === 'Testpur', 'dashboard month detail', r.j)
   r = await call('GET', '/api/clinic/dashboard', null, 'reception'); ok(r.status === 200 && !JSON.stringify(r.j).match(/paid|fee|amount/i), 'reception can open the dashboard data (no money)', r)
 }
-r = await call('GET', '/api/import/old/status', null, 'doctor'); ok(r.j.old_prescriptions === 3, 'old DB reachable: 3 prescriptions', r)
-r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 3 && r.j.patients_created === 2 && r.j.done, 'import: 3 prescriptions, 2 patients (Ramesh deduped by OP no)', r.j)
-r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 0 && r.j.skipped === 3, 're-running import is safe', r.j)
-r = await call('GET', '/api/patients?q=ramesh', null, 'doctor'); const ram = r.j[0]
-r = await call('GET', `/api/patients/${ram.id}`, null, 'doctor')
-ok(r.j.prescriptions.length === 2 && r.j.patient.conditions.includes('Diabetes'), 'imported patient has 2 prescriptions + conditions', r.j.patient)
-const rx1 = r.j.prescriptions.find(p => p.rx_date.startsWith('2026-08-01'))
-ok(rx1 && rx1.meds[0].freq === '1-0-1' && rx1.meds[0].days === 30 && rx1.meds[0].timing === 'after', 'imported medicine mapped (1-0-1, 30 days, after food)', rx1?.meds)
-ok(r.j.labs.some(l => l.test === 'HbA1c' && l.value_num === 7.2), 'imported HbA1c becomes a trend point', r.j.labs)
-r = await call('GET', `/api/rx/${rx1.id}`, null, 'doctor'); ok(r.j.rx.data.comorbid_details.diabetes.neuropathy === true && r.j.rx.data.systemic.cvs.includes('S1 S2 normal'), 'comorbidity details + CVS carried over', r.j.rx.data)
+if (process.env.OLD_DATABASE_URL) {   // needs the old-app test database; skipped (not failed) without it
+  r = await call('GET', '/api/import/old/status', null, 'doctor'); ok(r.j.old_prescriptions === 3, 'old DB reachable: 3 prescriptions', r)
+  r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 3 && r.j.patients_created === 2 && r.j.done, 'import: 3 prescriptions, 2 patients (Ramesh deduped by OP no)', r.j)
+  r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 0 && r.j.skipped === 3, 're-running import is safe', r.j)
+  r = await call('GET', '/api/patients?q=ramesh', null, 'doctor'); const ram = r.j[0]
+  r = await call('GET', `/api/patients/${ram.id}`, null, 'doctor')
+  ok(r.j.prescriptions.length === 2 && r.j.patient.conditions.includes('Diabetes'), 'imported patient has 2 prescriptions + conditions', r.j.patient)
+  const rx1 = r.j.prescriptions.find(p => p.rx_date.startsWith('2026-08-01'))
+  ok(rx1 && rx1.meds[0].freq === '1-0-1' && rx1.meds[0].days === 30 && rx1.meds[0].timing === 'after', 'imported medicine mapped (1-0-1, 30 days, after food)', rx1?.meds)
+  ok(r.j.labs.some(l => l.test === 'HbA1c' && l.value_num === 7.2), 'imported HbA1c becomes a trend point', r.j.labs)
+  r = await call('GET', `/api/rx/${rx1.id}`, null, 'doctor'); ok(r.j.rx.data.comorbid_details.diabetes.neuropathy === true && r.j.rx.data.systemic.cvs.includes('S1 S2 normal'), 'comorbidity details + CVS carried over', r.j.rx.data)
+} else console.log('SKIP old-app import tests (OLD_DATABASE_URL not set)')
 // one-request "call next", and two devices pressing it together must get different patients
 r = await call('POST', '/api/visits', { patient: { name: 'Ravi Kumar', sex: 'M', age_years: 33, phone: '9934000003' }, complaint: 'Cough' }, 'reception'); ok(r.status === 200, 'a third patient joins the queue', r)
 r = await call('POST', '/api/visits', { patient: { name: 'Geeta Devi', sex: 'F', age_years: 51, phone: '9934000004' }, complaint: 'Knee pain' }, 'reception'); ok(r.status === 200, 'a fourth patient joins the queue', r)
@@ -131,6 +133,22 @@ r = await call('POST', `/api/visits/${n1.j.visit_id}/start`, {}, 'doctor'); ok(r
 r = await call('GET', '/api/clinic/system', null, 'doctor'); ok(r.status === 200 && r.j.counts.patients >= 4 && r.j.counts.final_prescriptions >= 1 && typeof r.j.db_ms === 'number', 'system check returns record counts and timing', r)
 r = await call('GET', '/api/clinic/system', null, 'reception'); ok(r.status === 403, 'reception cannot open the system check', r)
 r = await call('GET', '/api/clinic/audit', null, 'doctor'); ok(r.j.some(a => a.action === 'rx.finalize') && r.j.some(a => a.action === 'login.failed'), 'audit log records actions', r.j.slice?.(0, 3))
+
+{ // voice recordings: anyone dictating can save; only the doctor can list, play or delete
+  const pt = await call('POST', '/api/patients', { name: 'Recording Test Patient', sex: 'M', age_years: 40 }, 'doctor'); const pid = pt.j.id
+  const audio = Buffer.alloc(6000, 7).toString('base64')
+  r = await call('POST', '/api/recordings', { audio_base64: audio, mime: 'audio/webm;codecs=opus', kind: 'consult', patient_id: pid, seconds: 4.2, transcript: 'Dolo 650 teen baar' }, 'doctor'); const rid = r.j.id
+  ok(r.status === 200 && !!rid, 'doctor saves a recording', r.j)
+  r = await call('POST', '/api/recordings', { audio_base64: audio, mime: 'audio/webm', kind: 'intake' }, 'reception'); ok(r.status === 200 && !!r.j.id, 'reception saves a new-patient recording', r.j)
+  r = await call('POST', '/api/recordings', { audio_base64: audio, mime: 'text/html', kind: 'intake' }, 'reception'); ok(r.status === 400, 'non-audio is refused', r)
+  r = await call('GET', '/api/recordings', null, 'reception'); ok(r.status === 403, 'reception cannot list recordings', r)
+  r = await call('GET', `/api/recordings/${rid}/audio`, null, 'reception'); ok(r.status === 403, 'reception cannot play a recording', r)
+  r = await call('GET', `/api/recordings?patient_id=${pid}`, null, 'doctor'); const one = r.j.rows?.find(x => x.id === rid)
+  ok(r.status === 200 && one?.bytes === 6000 && one?.seconds === 4.2 && one?.transcript === 'Dolo 650 teen baar', 'doctor lists a patient\'s recordings', r.j)
+  const fr = await fetch(B + `/api/recordings/${rid}/audio`, { headers: { cookie: jar.doctor } }); ok(fr.status === 200 && fr.headers.get('content-type') === 'audio/webm' && (await fr.arrayBuffer()).byteLength === 6000, 'doctor plays a recording', fr.status)
+  r = await call('DELETE', `/api/recordings/${rid}`, null, 'doctor'); ok(r.status === 200, 'doctor deletes a recording', r)
+  r = await call('GET', `/api/recordings/${rid}/audio`, null, 'doctor'); ok(r.status === 404, 'deleted recording is gone', r)
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

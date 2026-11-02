@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { compressImage, liveSpeech } from '../lib/media'
+import { compressImage, liveSpeech, listMics, savedMic, saveMic, testMic, micMessage } from '../lib/media'
 import { useDictation } from '../lib/useDictation'
 import { istToday } from '../lib/format'
 import { Modal, useToast, useElapsed } from './ui'
@@ -14,11 +14,11 @@ export type VoiceDraft = {
 }
 
 /** Dictate → transcript → AI draft → doctor ticks what to keep. */
-export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string; onClose: () => void; onApply: (d: VoiceDraft & { keep: Record<string, boolean>; medChoice: Med[] }) => void }) {
+export function VoiceDialog({ patientId, rxId, onClose, onApply }: { patientId: string; rxId?: string; onClose: () => void; onApply: (d: VoiceDraft & { keep: Record<string, boolean>; medChoice: Med[] }) => void }) {
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
   const [busy0, setBusy] = useState(false), [draft, setDraft] = useState<VoiceDraft | null>(null)
-  const dict = useDictation(lang, toast), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
+  const dict = useDictation(lang, toast, { kind: 'consult', patient_id: patientId, rx_id: rxId ?? null }), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
   const [keep, setKeep] = useState<Record<string, boolean>>({}), [medSel, setMedSel] = useState<(Med | null)[]>([])
   const make = async () => {
     stop(); setBusy(true)
@@ -144,7 +144,7 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
   const [busy0, setBusy] = useState(false), [preview, setPreview] = useState('')
-  const dict = useDictation(lang, toast), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
+  const dict = useDictation(lang, toast, { kind: 'intake' }), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
   const file = useRef<HTMLInputElement>(null)
   const send = async (body: { transcript?: string; image?: string; pdf?: string }) => {
     setBusy(true)
@@ -204,6 +204,32 @@ function VoiceBar({ d, lang, setLang }: { d: ReturnType<typeof useDictation>; la
         : <button className="btn danger lg" onClick={d.stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop · {d.secs} s</button>}
     </div>
     {d.rec === 'audio' && <div className="vu" aria-label="Microphone level"><span style={{ width: `${Math.round(d.level * 100)}%` }} /></div>}
+    {idle && !d.transcribing && <MicPicker />}
+    {d.keeping && idle && <p className="tiny muted">🔒 The recording is saved small and only the doctor can play it.{d.saved ? ` ${d.saved} saved in this dictation.` : ''}</p>}
     {d.status && <p className={'small ' + (/not|no |blocked|failed|could|wrong|credit|limit/i.test(d.status) && !/^Recording|^Listening|^Turning/.test(d.status) ? 'err-text' : 'muted')} role="status">{d.status}</p>}
+  </div>
+}
+
+/** Which microphone to use, with a 4-second level test. Chrome sometimes picks a silent input (a disconnected headset, "Stereo Mix"). */
+function MicPicker() {
+  const [mics, setMics] = useState<{ id: string; label: string }[]>([]), [sel, setSel] = useState(savedMic()), [lvl, setLvl] = useState(0), [testing, setTesting] = useState(false), [msg, setMsg] = useState('')
+  const load = () => listMics().then(setMics)
+  useEffect(() => { load(); const f = () => load(); navigator.mediaDevices?.addEventListener?.('devicechange', f); return () => navigator.mediaDevices?.removeEventListener?.('devicechange', f) }, [])
+  const test = async () => {
+    setTesting(true); setMsg('Say something for 4 seconds…')
+    try { const r = await testMic(setLvl); setMsg(r.peak ? `"${r.label}" is working.` : `No sound from "${r.label}". Pick another microphone and test again.`); load() }
+    catch (e: any) { setMsg(micMessage(e)) } finally { setTesting(false); setLvl(0) }
+  }
+  return <div className="stack tight">
+    <div className="row wrap small">
+      <span className="muted">Microphone</span>
+      <select className="inp sm" style={{ flex: '1 1 220px', minWidth: 0 }} value={sel} disabled={testing} onChange={e => { setSel(e.target.value); saveMic(e.target.value); setMsg('') }}>
+        <option value="">Computer default</option>
+        {mics.filter(m => m.id && m.id !== 'default').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+      </select>
+      <button className="btn sm" type="button" onClick={test} disabled={testing}>{testing ? 'Listening…' : 'Test microphone'}</button>
+    </div>
+    {testing && <div className="vu" aria-label="Microphone level"><span style={{ width: `${Math.round(lvl * 100)}%` }} /></div>}
+    {msg && !testing && <p className={'small ' + (/No sound|blocked|not|could/i.test(msg) ? 'err-text' : 'muted')}>{msg}</p>}
   </div>
 }

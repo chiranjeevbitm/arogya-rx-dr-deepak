@@ -530,3 +530,9 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .vu { height: 6px; border-radius: 99px; background: var(--desk-2); overflow: hidden }
 .vu > span { display: block; height: 100%; background: var(--neem); border-radius: 99px; transition: width .08s linear }
 .err-text { color: var(--sindoor); font-weight: 600 }
+
+/* voice recordings list */
+.recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px }
+.recs li { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line) }
+.recs li:first-child { border-top: 0; padding-top: 0 }
+.recs-t { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }

@@ -77,35 +77,63 @@ export function startDictation(lang: string, onText: (finalText: string, interim
 }
 
 /** Record audio for server-side transcription (works in any browser with a microphone, including iPhone Safari). */
-export async function recordAudio(onLevel?: (v: number) => void): Promise<{ stop: () => Promise<{ base64: string; mime: string }> }> {
+const MIC_KEY = 'arx.micId'
+export const savedMic = () => { try { return localStorage.getItem(MIC_KEY) || '' } catch { return '' } }
+export const saveMic = (id: string) => { try { id ? localStorage.setItem(MIC_KEY, id) : localStorage.removeItem(MIC_KEY) } catch { /* private mode */ } }
+/** Microphones on this computer (names appear once microphone permission has been given). */
+export async function listMics(): Promise<{ id: string; label: string }[]> {
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'communications').map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` })) } catch { return [] }
+}
+const SILENT_HELP = 'Choose another microphone in the list, check it is plugged in and not muted, and in Windows open Settings → Privacy & security → Microphone and turn on access for apps and desktop apps (Chrome).'
+
+/** Record audio for server-side transcription (works in any browser with a microphone, including iPhone Safari).
+    onLevel gets the loudness 0..1 many times a second. Uses the microphone chosen in the voice window, if any. */
+export async function recordAudio(onLevel?: (v: number) => void): Promise<{ label: string; stop: () => Promise<{ base64: string; mime: string; seconds: number; bytes: number }> }> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw Object.assign(new Error('unsupported'), { name: 'NotSupportedError' })
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-  console.info('[voice] recording from', stream.getAudioTracks()[0]?.label || 'microphone')
+  const base = { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, id = savedMic()
+  let stream: MediaStream
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: id ? { ...base, deviceId: { exact: id } } : base }) }
+  catch (e: any) { if (id && (e?.name === 'OverconstrainedError' || e?.name === 'NotFoundError')) { saveMic(''); stream = await navigator.mediaDevices.getUserMedia({ audio: base }) } else throw e }
+  const track = stream.getAudioTracks()[0], label = track?.label || 'the microphone'
+  console.info('[voice] recording from', label, { muted: track?.muted, state: track?.readyState, settings: track?.getSettings?.() })
   // loudness meter, so the doctor can see the microphone is hearing him
-  let ac: AudioContext | null = null, raf = 0
-  if (onLevel) try {
-    ac = new AudioContext(); const an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(stream).connect(an)
+  let ac: AudioContext | null = null, raf = 0, peak = 0
+  try {
+    ac = new AudioContext(); if (ac.state === 'suspended') await ac.resume().catch(() => {})
+    const an = ac.createAnalyser(); an.fftSize = 512; ac.createMediaStreamSource(stream).connect(an)
     const buf = new Uint8Array(an.fftSize)
-    const tick = () => { an.getByteTimeDomainData(buf); let m = 0; for (const x of buf) m = Math.max(m, Math.abs(x - 128)); onLevel(Math.min(1, m / 64)); raf = requestAnimationFrame(tick) }
+    const tick = () => { an.getByteTimeDomainData(buf); let m = 0; for (const x of buf) m = Math.max(m, Math.abs(x - 128)); const v = Math.min(1, m / 64); if (v > peak) peak = v; onLevel?.(v); raf = requestAnimationFrame(tick) }
     tick()
   } catch { /* no meter, recording still works */ }
   const cleanup = () => { cancelAnimationFrame(raf); try { ac?.close() } catch { /* ignore */ } stream.getTracks().forEach(t => t.stop()) }
   const pick = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m))
   let rec: MediaRecorder
-  try { rec = new MediaRecorder(stream, pick ? { mimeType: pick } : undefined) } catch (e) { cleanup(); throw e }
-  const chunks: Blob[] = []
+  // speech only, kept very small: mono Opus at 16 kbps is about 120 KB a minute and still clear for transcription
+  try { rec = new MediaRecorder(stream, { ...(pick ? { mimeType: pick } : {}), audioBitsPerSecond: 16000 }) }
+  catch { try { rec = new MediaRecorder(stream, pick ? { mimeType: pick } : undefined) } catch (e) { cleanup(); throw e } }
+  const chunks: Blob[] = [], t0 = Date.now()
   rec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
   rec.start(1000)
   const mime = (rec.mimeType || pick || 'audio/webm').split(';')[0]
-  return { stop: () => new Promise((res, rej) => {
+  return { label, stop: () => new Promise((res, rej) => {
     rec.onstop = async () => {
+      const muted = track?.muted || track?.readyState === 'ended'
       cleanup()
-      const b = new Blob(chunks, { type: mime })
-      if (b.size < 1500) return rej(new Error('Nothing was recorded. Speak after pressing Start, then press Stop.'))
+      const b = new Blob(chunks, { type: mime }), secs = Math.round((Date.now() - t0) / 1000)
+      console.info('[voice] recorded', { bytes: b.size, secs, peak: Math.round(peak * 100) / 100, muted })
+      if (secs < 1) return rej(new Error('That was too short. Press Start, speak, then press Stop.'))
+      if (b.size < 1500 || muted || (ac && peak < 0.01)) return rej(Object.assign(new Error(`No sound came from "${label}". ${SILENT_HELP}`), { name: 'NoAudio' }))
       const buf = new Uint8Array(await b.arrayBuffer()); let s = ''
       for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000))
-      res({ base64: btoa(s), mime })
+      res({ base64: btoa(s), mime, seconds: Math.round((Date.now() - t0) / 100) / 10, bytes: b.size })
     }
     try { rec.stop() } catch { cleanup(); rej(new Error('Nothing was recorded.')) }
   }) }
+}
+
+/** Open the chosen microphone for a few seconds only to show its level (the "Test microphone" button). */
+export async function testMic(onLevel: (v: number) => void, ms = 4000): Promise<{ label: string; peak: number }> {
+  const r = await recordAudio(onLevel)
+  await new Promise(res => setTimeout(res, ms))
+  try { await r.stop(); return { label: r.label, peak: 1 } } catch (e: any) { if (e?.name === 'NoAudio') return { label: r.label, peak: 0 }; throw e }
 }

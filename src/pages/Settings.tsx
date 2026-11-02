@@ -7,6 +7,7 @@ import { fmtDate, timeAgo, istToday, d10 } from '../lib/format'
 import { Modal, Spinner, useAsync, useToast, useDialog, Field, TagInput } from '../components/ui'
 import Icon from '../components/Icon'
 import { liveSpeech } from '../lib/media'
+import Recordings from '../components/Recordings'
 import { ParchiPreview } from '../components/Parchi'
 import MedSearch from '../components/MedSearch'
 import { mergeSettings, type ClinicSettings } from '../../shared/settings'
@@ -205,6 +206,7 @@ function Messages() {
         <p className="small muted">Files are stored in {me.features.storage === 'supabase' ? 'Supabase Storage (Mumbai)' : 'the database'}.</p>
       </section>
     </div>
+    {me.user.role === 'doctor' && <section className="card stack tight"><h2>Voice recordings</h2><p className="small muted">Every dictation is kept as a small audio file (about 120 KB a minute) in the clinic's private store. Only the doctor's login can list, play or delete them.</p><Recordings limit={40} /></section>}
     <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2>Recent messages</h2></div>
       {!msgs.data?.length ? <div className="empty small">No messages yet.</div> : <div className="tbl-wrap"><table className="t"><thead><tr><th>When</th><th>Patient</th><th>Type</th><th>How</th><th>Status</th></tr></thead><tbody>
         {msgs.data.map(m => <tr key={m.id}><td className="small">{timeAgo(m.created_at)}</td><td>{m.name || m.to_phone}</td><td>{({ rx: 'Prescription', reminder: 'Reminder', booking: 'Booking', receipt: 'Receipt' } as any)[m.kind] || m.kind}</td><td>{m.channel === 'api' ? 'Automatic' : 'WhatsApp link'}</td><td>{m.status === 'failed' ? <span className="tag red" title={m.error}>Failed</span> : m.status === 'link_opened' ? <span className="tag green">PDF opened</span> : <span className="tag">Sent</span>}</td></tr>)}

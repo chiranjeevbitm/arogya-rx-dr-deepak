@@ -18,6 +18,7 @@ import messages from './routes/messages.js'
 import ai from './routes/ai.js'
 import importer from './routes/import.js'
 import ask from './routes/ask.js'
+import recordings from './routes/recordings.js'
 
 export type Env = { Variables: { user: AuthUser; dbGen: number } }
 export const me = (c: Context) => c.get('user') as AuthUser
@@ -86,6 +87,7 @@ app.route('/messages', messages)
 app.route('/ai', ai)
 app.route('/import', importer)
 app.route('/ask', ask)
+app.route('/recordings', recordings)
 app.route('/cron', messages)
 
 app.notFound(c => c.json({ error: 'Not found' }, 404))

@@ -1,3 +1,4 @@
+import Recordings from '../components/Recordings'
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api, fileUrl } from '../lib/api'
@@ -71,6 +72,7 @@ export default function PatientPage({ id: pid }: { id?: string }) {
         {BILLING_ENABLED && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2 className="grow">Bills</h2><button className="btn sm" onClick={() => setBill(true)}><Icon n="plus" />Bill</button></div>
           {bills.length === 0 ? <div className="empty small">No bills.</div> : <div className="list">{bills.map((x: any) => <button key={x.id} className="li" onClick={() => setReceipt(x.id)}><span className="grow">#{x.bill_no}, {fmtDate(d10(x.bill_date))}</span><span className={'tag ' + (x.status === 'void' ? '' : x.status === 'due' ? 'amber' : 'green')}>{x.status === 'void' ? 'Cancelled' : x.status === 'due' ? 'Unpaid' : inr(x.paid)}</span></button>)}</div>}
         </section>}
+        {me.user.role === 'doctor' && <section className="card stack tight"><h2>Voice recordings</h2><Recordings patientId={p.id} limit={30} /></section>}
         {visits.length > 0 && <p className="small faint">Coming since {fmtDate(d10(visits[visits.length - 1].visit_date))}.</p>}
       </aside>
     </div>

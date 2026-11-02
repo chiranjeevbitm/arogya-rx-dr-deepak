@@ -41,6 +41,9 @@ r.post('/upload/:kind', requireAuth('doctor', 'admin'), async c => {
 })
 
 r.get('/files/:id', async c => {
+  // voice recordings are only for the doctor, through /api/recordings/:id/audio
+  const [k] = await sql()`select kind from arx.files where id = ${P(c, 'id')} and clinic_id = ${me(c).clinic_id}`
+  if (k?.kind === 'voice') throw new HttpError(403, 'Only the doctor can play recordings.')
   const f = await getFile(P(c, 'id'), me(c).clinic_id)
   return new Response(new Uint8Array(f.data), { headers: { 'Content-Type': f.mime, 'Cache-Control': 'private, max-age=86400' } })
 })

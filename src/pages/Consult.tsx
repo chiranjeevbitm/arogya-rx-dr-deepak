@@ -240,7 +240,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     </>)}
     <PrintArea ref={page} s={s} patient={patient} data={data} meds={meds} date={d10(b.rx.rx_date)} draft={!final} token={b.visit?.token} />
 
-    {voice && <VoiceDialog patientId={patient.id} onClose={() => setVoice(false)} onApply={d => {
+    {voice && <VoiceDialog patientId={patient.id} rxId={rxId} onClose={() => setVoice(false)} onApply={d => {
       setVoice(false)
       setData(x => ({
         ...x,
