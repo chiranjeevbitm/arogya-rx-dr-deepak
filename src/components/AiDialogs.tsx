@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { compressImage, startDictation, recordAudio } from '../lib/media'
+import { compressImage } from '../lib/media'
+import { useDictation } from '../lib/useDictation'
 import { istToday } from '../lib/format'
 import { Modal, useToast, useElapsed } from './ui'
 import Icon from './Icon'
@@ -16,19 +17,9 @@ export type VoiceDraft = {
 export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string; onClose: () => void; onApply: (d: VoiceDraft & { keep: Record<string, boolean>; medChoice: Med[] }) => void }) {
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
-  const [text, setText] = useState(''), [interim, setInterim] = useState(''), [rec, setRec] = useState<'idle' | 'live' | 'audio'>('idle')
-  const [busy, setBusy] = useState(false), [draft, setDraft] = useState<VoiceDraft | null>(null), secs = useElapsed(busy)
+  const [busy0, setBusy] = useState(false), [draft, setDraft] = useState<VoiceDraft | null>(null)
+  const { text, setText, interim, rec, transcribing, start, stop } = useDictation(lang, toast), busy = busy0 || transcribing, secs = useElapsed(busy0)
   const [keep, setKeep] = useState<Record<string, boolean>>({}), [medSel, setMedSel] = useState<(Med | null)[]>([])
-  const stopRef = useRef<{ stop: () => any } | null>(null), base = useRef('')
-  useEffect(() => () => { stopRef.current?.stop() }, [])
-  const start = async () => {
-    base.current = text ? text + ' ' : ''
-    const r = startDictation(lang, (f, i) => { setText(base.current + f); setInterim(i) }, err => { setRec('idle'); setInterim(''); if (err) toast(err, 'err') })
-    if (r) { stopRef.current = r; setRec('live'); return }
-    try { const a = await recordAudio(); stopRef.current = { stop: async () => { const { base64, mime } = await a.stop(); setBusy(true); try { const t = await api<{ text: string }>('/ai/transcribe', { body: { audio_base64: base64, mime } }); setText(x => (x ? x + ' ' : '') + t.text) } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) } } }; setRec('audio') }
-    catch { toast('Microphone is not available on this device.', 'err') }
-  }
-  const stop = () => { stopRef.current?.stop(); stopRef.current = null; setRec('idle'); setInterim('') }
   const make = async () => {
     stop(); setBusy(true)
     try {
@@ -45,11 +36,11 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
       <div className="row wrap">
         <div className="seg"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={rec !== 'idle'}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={rec !== 'idle'}>English</button></div>
         <span className="grow" />
-        {rec === 'idle' ? <button className="btn primary lg" onClick={start}><Icon n="mic" />Start speaking</button>
+        {rec === 'idle' ? <button className="btn primary lg" disabled={transcribing} onClick={start}><Icon n="mic" />{transcribing ? 'Turning speech into text…' : 'Start speaking'}</button>
           : <button className="btn danger lg" onClick={stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop</button>}
       </div>
       <textarea className="inp" rows={7} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Teen din se bukhar aur gale mein dard. BP 120 by 80, temperature 101. Viral fever. Dolo 650 teen baar khane ke baad teen din, Levocetirizine raat ko paanch din. CBC. Teen din baad dikhayein." />
-      {rec === 'audio' && <div className="alert info small">Recording. This browser has no live speech, so the audio is turned into text when you press Stop.</div>}
+      {rec === 'audio' && <div className="alert info small">Recording. Speak now, then press Stop. The audio is turned into text on the server (live text is not available here).</div>}
     </div>
   </Modal>
 
@@ -157,10 +148,9 @@ export type IntakeFields = { name: string; sex: 'M' | 'F' | 'O' | null; age_year
 export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'photo'; onClose: () => void; onFilled: (f: IntakeFields) => void }) {
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
-  const [text, setText] = useState(''), [interim, setInterim] = useState(''), [rec, setRec] = useState<'idle' | 'live' | 'audio'>('idle')
-  const [busy, setBusy] = useState(false), secs = useElapsed(busy), [preview, setPreview] = useState('')
-  const stopRef = useRef<{ stop: () => any } | null>(null), base = useRef(''), file = useRef<HTMLInputElement>(null)
-  useEffect(() => () => { stopRef.current?.stop() }, [])
+  const [busy0, setBusy] = useState(false), [preview, setPreview] = useState('')
+  const { text, setText, interim, rec, transcribing, start, stop } = useDictation(lang, toast), busy = busy0 || transcribing, secs = useElapsed(busy0)
+  const file = useRef<HTMLInputElement>(null)
   const send = async (body: { transcript?: string; image?: string; pdf?: string }) => {
     setBusy(true)
     try {
@@ -169,14 +159,6 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
       onFilled(f)
     } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) }
   }
-  const start = async () => {
-    base.current = text ? text + ' ' : ''
-    const r = startDictation(lang, (f, i) => { setText(base.current + f); setInterim(i) }, err => { setRec('idle'); setInterim(''); if (err) toast(err, 'err') })
-    if (r) { stopRef.current = r; setRec('live'); return }
-    try { const a = await recordAudio(); stopRef.current = { stop: async () => { const { base64, mime } = await a.stop(); setBusy(true); try { const t = await api<{ text: string }>('/ai/transcribe', { body: { audio_base64: base64, mime } }); setText(x => (x ? x + ' ' : '') + t.text) } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) } } }; setRec('audio') }
-    catch { toast('Microphone is not available on this device.', 'err') }
-  }
-  const stop = () => { stopRef.current?.stop(); stopRef.current = null; setRec('idle'); setInterim('') }
   const pick = useRef<HTMLInputElement>(null), [pdfName, setPdfName] = useState('')
   const go = async (f: File) => {
     try {
@@ -212,11 +194,11 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
       <div className="row wrap">
         <div className="seg"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={rec !== 'idle'}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={rec !== 'idle'}>English</button></div>
         <span className="grow" />
-        {rec === 'idle' ? <button className="btn primary lg" onClick={start}><Icon n="mic" />Start speaking</button>
+        {rec === 'idle' ? <button className="btn primary lg" disabled={transcribing} onClick={start}><Icon n="mic" />{transcribing ? 'Turning speech into text…' : 'Start speaking'}</button>
           : <button className="btn danger lg" onClick={stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop</button>}
       </div>
       <textarea className="inp" rows={4} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Ramesh Kumar, 45 saal, male, mobile 98765 43210, gaon Bochaha, Muzaffarpur. Sulfa se allergy hai." />
-      {rec === 'audio' && <div className="alert info small">Recording. This browser has no live speech, so the audio is turned into text when you press Stop.</div>}
+      {rec === 'audio' && <div className="alert info small">Recording. Speak now, then press Stop. The audio is turned into text on the server (live text is not available here).</div>}
     </div>
   </Modal>
 }

@@ -77,7 +77,7 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
   return c.json({ ...out, meds })
 })
 
-r.post('/transcribe', requireAuth('doctor', 'admin'), async c => {
+r.post('/transcribe', async c => {
   const b = await body(c, z.object({ audio_base64: z.string().max(14_000_000), mime: z.string().max(60) }))
   await rateLimit(`ai:${me(c).id}`, 120, 3600)
   return c.json({ text: await transcribe(Buffer.from(b.audio_base64, 'base64'), b.mime) })
