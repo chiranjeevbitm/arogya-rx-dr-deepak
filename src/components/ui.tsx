@@ -53,17 +53,26 @@ export function TagInput({ value, onChange, placeholder, suggestions = [] }: { v
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) { return <div className="empty">{label}</div> }
 
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
-  const [state, set] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true })
+/** Last result per key, kept for the session: a screen you return to shows its previous data at once
+    and refreshes quietly in the background instead of starting from a spinner. */
+const cache = new Map<string, unknown>()
+export const clearCache = () => cache.clear()
+
+export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], key?: string) {
+  const ck = key ? key + '|' + JSON.stringify(deps) : null
+  const [state, set] = useState<{ data?: T; error?: string; loading: boolean }>(() => ck && cache.has(ck) ? { data: cache.get(ck) as T, loading: false } : { loading: true })
   const [n, setN] = useState(0)
   useEffect(() => {
     let alive = true
-    set(s => ({ ...s, loading: true }))
-    fn().then(d => alive && set({ data: d, loading: false })).catch(e => alive && set({ error: e.message, loading: false }))
+    set(s => {
+      const hit = ck && cache.has(ck) ? (cache.get(ck) as T) : undefined
+      return hit !== undefined ? { data: hit, loading: false } : { ...s, loading: true }
+    })
+    fn().then(d => { if (ck) cache.set(ck, d); if (alive) set({ data: d, loading: false }) }).catch(e => alive && set(s => ({ data: s.data, error: e.message, loading: false })))
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, n])
-  return { ...state, reload: () => setN(x => x + 1), setData: (d: T) => set(s => ({ ...s, data: d })) }
+  return { ...state, reload: () => setN(x => x + 1), setData: (d: T) => { if (ck) cache.set(ck, d); set(s => ({ ...s, data: d })) } }
 }
 
 /** Calls `fn` every `ms` while the tab is visible, and straight away when the tab is focused or the network returns. */

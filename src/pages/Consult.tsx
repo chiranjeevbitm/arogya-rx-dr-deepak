@@ -13,7 +13,7 @@ import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 import { safetyChecks, sigHi, vitalFlag, normFreq, FREQS, ROUTES, COMORBIDITIES, ADDICTIONS, EXAM_SIGNS, SYSTEMIC, COMMON_INVESTIGATIONS, ADVICE_PRESETS, parchiValidity, PARCHI_VALID_DAYS, type Med, type Vitals } from '../../shared/rx'
 
-type Bundle = { rx: { id: string; status: string; rx_date: string; data: RxData; meds: Med[]; patient_id: string; visit_id: string | null; pdf_file_id: string | null }; patient: any; visit: any }
+type Bundle = { history?: Hist; rx: { id: string; status: string; rx_date: string; data: RxData; meds: Med[]; patient_id: string; visit_id: string | null; pdf_file_id: string | null }; patient: any; visit: any }
 type Template = { id: string; name: string; data: { diagnosis: string; meds: Med[]; investigations: string[]; advice: string[]; follow_up_days?: number | null } }
 type Hist = { prescriptions: { id: string; rx_date: string; diagnosis: string; complaints: string; meds: Med[]; status: string; vitals: Vitals }[]; labs: { test: string; value_num: number; result_date: string; unit: string }[]; bills: any[] }
 
@@ -36,9 +36,9 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
 
   const load = useCallback(async () => {
     try {
-      const x = await api<Bundle>(`/rx/${rxId}`)
+      const x = await api<Bundle>(`/rx/${rxId}?history=1`)   // prescription and patient history in one request
       setB(x); setData(x.rx.data || {}); setMeds(x.rx.meds || []); first.current = true; setSaved('saved')
-      api<Hist>(`/patients/${x.rx.patient_id}`).then(setHist).catch(() => {})
+      if (x.history) setHist(x.history)
     } catch (e: any) { setErr(e.message) }
   }, [rxId])
   useEffect(() => { setB(null); setErr(''); load(); api<Template[]>('/templates').then(setTemplates).catch(() => {}); api<{ name: string; defaults: Partial<Med> }[]>('/medicines/regular').then(setRegular).catch(() => {}) }, [load])

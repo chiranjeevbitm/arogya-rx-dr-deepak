@@ -19,9 +19,9 @@ export default function Opd() {
 
 function DoctorOpd() {
   const { rxId } = useParams(), nav = useNavigate(), toast = useToast()
-  const q = useAsync(() => api<Visit[]>('/visits'), [])
+  const q = useAsync(() => api<Visit[]>('/visits'), [], 'visits')
   const [adding, setAdding] = useState(false)
-  useLive(q.reload, 4000)   // new tokens from reception show up on their own
+  useLive(q.reload, 10000)   // new tokens from reception show up on their own
   const box = useRef<HTMLDivElement>(null)
   const [sideW, setSideW] = useState(() => { try { return Math.max(280, Number(localStorage.getItem('arx.sideW')) || 420) } catch { return 420 } })
   const setW = (w: number) => { const max = Math.max(320, (box.current?.clientWidth || 1400) - 420); const v = Math.round(Math.min(Math.max(w, 0), max)); setSideW(v); try { localStorage.setItem('arx.sideW', String(v)) } catch { /* private mode */ } }

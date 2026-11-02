@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { api } from './api'
+import { clearCache } from '../components/ui'
 import type { ClinicSettings } from '../../shared/settings'
 
 export type Me = {
@@ -17,6 +18,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try { setMe(await api<Me>('/auth/me')) } catch { setMe(null) } finally { setLoading(false) }
   }, [])
-  useEffect(() => { refresh(); const f = () => setMe(null); window.addEventListener('arx:logout', f); return () => window.removeEventListener('arx:logout', f) }, [refresh])
+  useEffect(() => { refresh(); const f = () => { clearCache(); setMe(null) }; window.addEventListener('arx:logout', f); return () => window.removeEventListener('arx:logout', f) }, [refresh])
   return <Ctx.Provider value={{ me, loading, refresh, setSettings: s => setMe(m => (m ? { ...m, clinic: { ...m.clinic, settings: s } } : m)) }}>{children}</Ctx.Provider>
 }

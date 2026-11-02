@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
-import { api, fileUrl } from '../lib/api'
+import { api, fileUrl, timings } from '../lib/api'
 import { useMe, useSession } from '../lib/session'
 import { compressImage } from '../lib/media'
 import { fmtDate, timeAgo, istToday, d10 } from '../lib/format'
@@ -232,6 +232,28 @@ function Import() {
   </div>
 }
 
+/** Sends a few small requests and reports how long the trip to the server takes from this device, so slowness can be measured, not guessed. */
+function SpeedCheck() {
+  const [res, setRes] = useState<{ trip: number; server: number; db: number } | null>(null), [busy, setBusy] = useState(false)
+  const med = (a: number[]) => { const b = [...a].sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0 }
+  const run = async () => {
+    setBusy(true); setRes(null)
+    try {
+      const from = timings.length
+      for (let i = 0; i < 5; i++) await api('/health?db=1')
+      const t = timings.slice(from)
+      setRes({ trip: med(t.map(x => x.ms)), server: med(t.map(x => x.server ?? 0)), db: Math.max(...t.map(x => x.ms)) })
+    } catch { setRes(null) } finally { setBusy(false) }
+  }
+  const slow = timings.filter(t => t.ms > 1500).length
+  return <section className="sec"><div className="sec-h"><h3>Speed check</h3></div><div className="sec-b">
+    <p className="small muted" style={{ margin: 0 }}>Sends 5 small requests and shows how long each takes from this device. Run it from the clinic computer and send the numbers if pages feel slow.</p>
+    <div className="row"><button className="btn" disabled={busy} onClick={run}>{busy ? 'Checking…' : 'Run speed check'}</button>
+      {res && <span><b>{res.trip} ms</b> per request (server work {res.server} ms, slowest {res.db} ms). {res.trip < 400 ? 'Fast.' : res.trip < 900 ? 'Acceptable.' : 'Slow: the network or the server region is the cause.'}</span>}</div>
+    {slow > 0 && <span className="small muted">{slow} request{slow > 1 ? 's' : ''} took over 1.5 seconds since this page was opened.</span>}
+  </div></section>
+}
+
 function Security() {
   const toast = useToast(), me = useMe()
   const [f, setF] = useState({ current: '', next: '', again: '' })
@@ -245,6 +267,7 @@ function Security() {
         <Field label="New password again"><input type="password" className="inp" autoComplete="new-password" value={f.again} onChange={e => setF({ ...f, again: e.target.value })} /></Field></div>
       <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={f.next.length < 8} onClick={change}>Change password</button>
     </div></section>
+    <SpeedCheck />
     {me.user.role !== 'reception' && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2>Activity log</h2><span className="small muted">Every login, prescription, bill and setting change. It cannot be edited.</span></div>
       <div className="tbl-wrap" style={{ maxHeight: 460, overflow: 'auto' }}><table className="t"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>
         {(audit.data || []).map(a => <tr key={a.id}><td className="small nowrap">{fmtDate(d10(a.at))} {new Date(a.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td><td>{a.user_name || a.meta?.phone || '—'}</td><td>{label[a.action] || a.action}</td></tr>)}

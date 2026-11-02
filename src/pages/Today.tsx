@@ -16,12 +16,12 @@ type Appt = { id: string; name: string; phone: string; time: string | null; stat
 export default function Today() {
   const me = useMe(), nav = useNavigate(), toast = useToast()
   const isDoc = me.user.role !== 'reception'
-  const q = useAsync(() => api<Visit[]>('/visits'), [])
-  const sum = useAsync(() => api<any>('/clinic/summary'), [])
-  const ap = useAsync(() => api<Appt[]>('/appointments'), [])
+  const q = useAsync(() => api<Visit[]>('/visits'), [], 'visits')
+  const sum = useAsync(() => api<any>('/clinic/summary'), [], 'summary')
+  const ap = useAsync(() => api<Appt[]>('/appointments'), [], 'appts')
   const [adding, setAdding] = useState(false), [billFor, setBillFor] = useState<Visit | null>(null), [receipt, setReceipt] = useState<string | null>(null), [vitalsFor, setVitalsFor] = useState<Visit | null>(null)
   const reload = () => { q.reload(); sum.reload(); ap.reload() }
-  useLive(() => { q.reload(); ap.reload() }, 5000)
+  useLive(() => { q.reload(); ap.reload() }, 10000)
 
   const open = async (v: Visit) => {
     if (!isDoc) return nav(`/patients/${v.patient_id}`)

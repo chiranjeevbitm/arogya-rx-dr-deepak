@@ -56,12 +56,10 @@ r.post('/', async c => {
   return c.json(p)
 })
 
-r.get('/:id', async c => {
-  const cid = me(c).clinic_id, id = P(c, 'id')
-  const [p] = await sql()`select * from arx.patients where id = ${id} and clinic_id = ${cid}`
-  if (!p) throw new HttpError(404, 'Patient not found.')
+export async function patientDetail(cid: string, id: string) {
   const db = sql()
-  const [visits, rxs, docs, labs, bills, appts] = await Promise.all([
+  const [[p], visits, rxs, docs, labs, bills, appts] = await Promise.all([
+    db`select * from arx.patients where id = ${id} and clinic_id = ${cid}`,
     db`select id, visit_date, token, status, visit_type, complaint from arx.visits where patient_id = ${id} order by visit_date desc, token desc limit 100`,
     db`select id, rx_date, status, data->>'diagnosis' as diagnosis, data->>'complaints' as complaints, data->'vitals' as vitals, jsonb_array_length(meds) as med_count, meds, legacy_id is not null as imported
        from arx.prescriptions where patient_id = ${id} and clinic_id = ${cid} order by rx_date desc, created_at desc limit 200`,
@@ -70,8 +68,11 @@ r.get('/:id', async c => {
     db`select id, bill_no, total::float, paid::float, mode, status, bill_date from arx.bills where patient_id = ${id} and clinic_id = ${cid} order by created_at desc limit 50`,
     db`select id, appt_date, appt_time, status, reason, source from arx.appointments where patient_id = ${id} and clinic_id = ${cid} and appt_date >= ${istToday()} order by appt_date`,
   ])
-  return c.json({ patient: p, visits, prescriptions: rxs, documents: docs, labs, bills, upcoming: appts })
-})
+  if (!p) throw new HttpError(404, 'Patient not found.')
+  return { patient: p, visits, prescriptions: rxs, documents: docs, labs, bills, upcoming: appts }
+}
+
+r.get('/:id', async c => c.json(await patientDetail(me(c).clinic_id, P(c, 'id'))))
 
 r.put('/:id', async c => {
   const b = await body(c, PatientIn.partial())

@@ -7,7 +7,7 @@ import { audit } from '../lib/audit.js'
 import { putFile } from '../lib/storage.js'
 import { mergeSettings } from '../../shared/settings.js'
 import { istToday, addDaysISO, safetyChecks } from '../../shared/rx.js'
-import { normTest } from './patients.js'
+import { normTest, patientDetail } from './patients.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())
@@ -27,16 +27,26 @@ async function load(c: any, id: string) {
 }
 
 export async function rxBundle(clinicId: string, id: string) {
-  const [rx] = await sql()`select * from arx.prescriptions where id = ${id} and clinic_id = ${clinicId}`
+  const db = sql()
+  const [rx] = await db`select * from arx.prescriptions where id = ${id} and clinic_id = ${clinicId}`
   if (!rx) throw new HttpError(404, 'Prescription not found.')
-  const [p] = await sql()`select * from arx.patients where id = ${rx.patient_id}`
-  const [v] = rx.visit_id ? await sql()`select id, token, visit_date, visit_type, status, started_at, finished_at from arx.visits where id = ${rx.visit_id}` : [null]
-  const [cl] = await sql()`select id, slug, name, settings from arx.clinics where id = ${clinicId}`
-  const [doc] = rx.created_by ? await sql()`select name from arx.users where id = ${rx.created_by}` : [null]
+  // the other four lookups do not depend on each other: run them side by side (2 round trips instead of 5)
+  const [[p], [v], [cl], [doc]] = await Promise.all([
+    db`select * from arx.patients where id = ${rx.patient_id}`,
+    rx.visit_id ? db`select id, token, visit_date, visit_type, status, started_at, finished_at from arx.visits where id = ${rx.visit_id}` : Promise.resolve([null]),
+    db`select id, slug, name, settings from arx.clinics where id = ${clinicId}`,
+    rx.created_by ? db`select name from arx.users where id = ${rx.created_by}` : Promise.resolve([null]),
+  ])
   return { rx, patient: p, visit: v, clinic: { ...cl, settings: mergeSettings(cl.settings) }, author: doc?.name || null }
 }
 
-r.get('/:id', async c => c.json(await rxBundle(me(c).clinic_id, P(c, 'id'))))
+/** ?history=1 adds the patient's history to the same reply, so opening a consult is one request instead of two. */
+r.get('/:id', async c => {
+  const cid = me(c).clinic_id, id = P(c, 'id')
+  const b = await rxBundle(cid, id)
+  if (c.req.query('history') !== '1') return c.json(b)
+  return c.json({ ...b, history: await patientDetail(cid, b.rx.patient_id) })
+})
 
 /** New prescription for a patient outside the queue (e.g. reprint, phone consult). */
 r.post('/', requireAuth('doctor', 'admin'), async c => {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { ensureSchema, HttpError, warmDb, markDbUse, resetDb, isDeadConnection } from './db.js'
+import { ensureSchema, HttpError, warmDb, markDbUse, resetDb, isDeadConnection, sql } from './db.js'
 import type { AuthUser } from './lib/auth.js'
 import auth from './routes/auth.js'
 import setup from './routes/setup.js'
@@ -47,11 +47,21 @@ app.use('*', async (c, next) => {
     const host = c.req.header('x-forwarded-host') || c.req.header('host')
     if (origin && host && new URL(origin).host !== host) throw new HttpError(403, 'Cross-site request blocked.')
   }
-  if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema() }
-  try { await next() } finally { markDbUse() }
+  const t0 = performance.now()
+  let warm = 0
+  if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema(); warm = performance.now() - t0 }
+  try { await next() } finally {
+    markDbUse()
+    // lets the browser (and the Speed check in Settings) tell server time apart from network time
+    c.header('Server-Timing', `db-ready;dur=${warm.toFixed(0)}, total;dur=${(performance.now() - t0).toFixed(0)}`)
+  }
 })
 
-app.get('/health', c => c.json({ ok: true, at: new Date().toISOString() }))
+// /api/health?db=1 is what the keep-warm ping calls: it also wakes the database connection and the free Supabase project
+app.get('/health', async c => {
+  if (c.req.query('db') === '1') { await warmDb(true); await ensureSchema(); await sql()`select 1` }
+  return c.json({ ok: true, at: new Date().toISOString() })
+})
 app.route('/auth', auth)
 app.route('/setup', setup)
 app.route('/clinic', clinic)

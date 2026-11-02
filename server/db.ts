@@ -65,7 +65,10 @@ export function ensureSchema(): Promise<void> {
 
 async function migrate() {
   const db = sql()
-  await db.begin(async tx => {
+  // fast path (almost every cold start): the newest migration is already applied, so skip the locked transaction
+  let upToDate = false
+  try { upToDate = (await db`select 1 from arx.schema_migrations where version = ${MIGRATIONS[MIGRATIONS.length - 1].version}`).length > 0 } catch { /* first run: table missing */ }
+  if (!upToDate) await db.begin(async tx => {
     await tx`select pg_advisory_xact_lock(727274)`
     await tx`create schema if not exists arx`
     await tx`create table if not exists arx.schema_migrations (version integer primary key, name text not null, applied_at timestamptz not null default now())`
@@ -79,8 +82,11 @@ async function migrate() {
   })
   // Session-signing key: SESSION_SECRET if set, otherwise generated once and kept in the database.
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-    await db`insert into arx.app_secrets (name, value) values ('session', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')) on conflict (name) do nothing`
-    const [r] = await db`select value from arx.app_secrets where name = 'session'`
+    let [r] = await db`select value from arx.app_secrets where name = 'session'`
+    if (!r) {
+      await db`insert into arx.app_secrets (name, value) values ('session', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')) on conflict (name) do nothing`
+      ;[r] = await db`select value from arx.app_secrets where name = 'session'`
+    }
     dbSessionSecret = r.value
   }
 }

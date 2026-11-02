@@ -1,11 +1,11 @@
-import { toCanvas } from 'html-to-image'
-import { jsPDF } from 'jspdf'
 
 /** Renders an A5 or A4 element to a PDF using the browser's own layout and text shaping
     (SVG foreignObject), so Hindi and spacing match the screen and the printed page exactly. */
 export async function elementToPdf(el: HTMLElement): Promise<Blob> {
   await document.fonts?.ready
   await Promise.all(Array.from(el.querySelectorAll('img')).map(i => (i.complete ? null : new Promise(r => { i.onload = i.onerror = r }))))
+  // the PDF libraries (about 145 KB) are fetched only when someone actually prints or downloads
+  const [{ toCanvas }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')])
   const canvas = await toCanvas(el, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: false, width: el.offsetWidth, height: el.offsetHeight })
   const a5 = el.offsetWidth < 700 // 148 mm ≈ 559 px; 210 mm ≈ 794 px
   const W = a5 ? 148 : 210, H = a5 ? 210 : 297
