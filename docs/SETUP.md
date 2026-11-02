@@ -54,7 +54,9 @@ The Supabase free plan has **no automatic backups**, and this repository is publ
 
 What it covers: the whole `arx` schema (patients, prescriptions, visits, bills, settings, activity log). It does **not** cover files kept in the Supabase Storage bucket (scanned documents, logo, PDFs); download that bucket from the Supabase dashboard now and then.
 
-Restore into an empty Supabase project:
+Moving to a new Supabase project (for example Ireland to Mumbai): use `scripts/move-database.sh`. It dumps the old database, replaces the `arx` schema on the new one, compares the row counts table by table, and (optional) copies the stored files. It only reads the old project and refuses to overwrite a destination that already has patients. Run it on your own computer; the instructions are at the top of the file. After it prints matching counts, set `DATABASE_URL`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY` in Vercel to the new project and redeploy. Do not open /setup on the new project: logins and passwords are copied with the data.
+
+Restoring by hand into an empty Supabase project:
 ```
 gpg --decrypt arx-YYYY-MM-DD.dump.gpg > arx.dump
 psql "$NEW_DIRECT_URL" -c "create schema if not exists extensions; create extension if not exists pg_trgm with schema extensions;"
