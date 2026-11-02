@@ -139,11 +139,14 @@ Rules:
 - Allergies only if explicitly mentioned (for example "sulfa se allergy"). Do not guess.`
 
 r.post('/patient-intake', async c => {
-  const b = await body(c, z.object({ transcript: z.string().max(4000).optional(), image: z.string().max(8_000_000).optional() }))
+  const b = await body(c, z.object({ transcript: z.string().max(4000).optional(), image: z.string().max(8_000_000).optional(), pdf: z.string().max(6_000_000).optional() }))
   const u = me(c)
   await rateLimit(`ai:${u.id}`, 120, 3600)
   const parts: any[] = [{ type: 'input_text', text: `Today is ${istToday()}.` }]
-  if (b.image) {
+  if (b.pdf) {
+    if (!/^data:application\/pdf;base64,/.test(b.pdf)) throw new HttpError(400, 'Send a PDF file.')
+    parts.push({ type: 'input_text', text: 'Read the patient details from this PDF (use the first pages; ignore anything that is not about the patient).' }, { type: 'input_file', filename: 'slip.pdf', file_data: b.pdf })
+  } else if (b.image) {
     if (!/^data:image\/(jpeg|png|webp);base64,/.test(b.image)) throw new HttpError(400, 'Send a JPG, PNG or WebP photo.')
     parts.push({ type: 'input_text', text: 'Read the patient details from this photo.' }, { type: 'input_image', image_url: b.image, detail: 'high' })
   } else if (b.transcript && b.transcript.trim().length >= 3) {
@@ -152,7 +155,7 @@ r.post('/patient-intake', async c => {
   const out = await aiJson<any>({ kind: 'patient_intake', clinicId: u.clinic_id, userId: u.id, system: INTAKE_SYSTEM, schemaName: 'patient_form', schema: INTAKE_SCHEMA, effort: 'low', maxTokens: 2000, parts })
   const phone = String(out.phone || '').replace(/\D/g, '').slice(-10)
   const age = Number.isInteger(out.age_years) && out.age_years >= 0 && out.age_years <= 125 ? out.age_years : null
-  await audit(c, 'ai.patient_intake', 'patient', null, { via: b.image ? 'photo' : 'voice' })
+  await audit(c, 'ai.patient_intake', 'patient', null, { via: b.pdf ? 'pdf' : b.image ? 'photo' : 'voice' })
   return c.json({ name: String(out.name || '').trim().slice(0, 80), sex: ['M', 'F', 'O'].includes(out.sex) ? out.sex : null, age_years: age, phone: phone.length === 10 ? phone : '', address: String(out.address || '').trim().slice(0, 200), allergies: (out.allergies || []).map((x: string) => String(x).trim()).filter(Boolean).slice(0, 10) })
 })
 

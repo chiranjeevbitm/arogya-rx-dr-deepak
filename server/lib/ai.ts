@@ -6,7 +6,7 @@ export const aiConfigured = () => !!process.env.OPENAI_API_KEY
 const base = () => (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
 export const aiModel = () => process.env.AI_MODEL || 'gpt-5-nano'
 
-type Part = { type: 'input_text'; text: string } | { type: 'input_image'; image_url: string; detail?: 'low' | 'high' | 'auto' }
+type Part = { type: 'input_text'; text: string } | { type: 'input_image'; image_url: string; detail?: 'low' | 'high' | 'auto' } | { type: 'input_file'; filename: string; file_data: string }
 
 export async function aiJson<T>(o: {
   kind: string; clinicId: string; userId: string; system: string; parts: Part[]; schemaName: string; schema: object; effort?: 'minimal' | 'low' | 'medium'; maxTokens?: number

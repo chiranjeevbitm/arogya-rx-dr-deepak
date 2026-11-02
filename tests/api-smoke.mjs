@@ -33,6 +33,7 @@ r = await call('GET', '/api/medicines?q=dolo 65', null, 'doctor'); ok(r.j.length
 r = await call('GET', '/api/medicines?q=paracetmol', null, 'doctor'); ok(r.j.some(x => /paracetamol/i.test(x.name)), 'fuzzy search handles a typo (paracetmol)', r.j.slice?.(0, 3))
 r = await call('POST', '/api/ai/patient-intake', {}, 'doctor'); ok(r.status === 400, 'patient intake with nothing is rejected', r)
 r = await call('POST', '/api/ai/patient-intake', { image: 'data:text/plain;base64,AAAA' }, 'doctor'); ok(r.status === 400, 'patient intake rejects a non-image', r)
+r = await call('POST', '/api/ai/patient-intake', { pdf: 'data:text/plain;base64,AAAA' }, 'doctor'); ok(r.status === 400, 'patient intake rejects a non-PDF in the pdf field', r)
 r = await call('POST', '/api/ai/patient-intake', { transcript: 'Ramesh Kumar 45 saal' }, 'reception'); ok(r.status !== 403 && r.status !== 401, 'reception may use patient intake (not blocked by role)', r)
 r = await call('GET', '/api/medicines/ja?name=' + encodeURIComponent('Telmisartan 40 mg Tablet'), null, 'doctor'); ok(r.j && /telmisartan/i.test(r.j.name), 'Jan Aushadhi alternative found', r.j)
 

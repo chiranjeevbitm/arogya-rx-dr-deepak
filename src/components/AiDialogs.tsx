@@ -148,7 +148,7 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
   const [busy, setBusy] = useState(false), secs = useElapsed(busy), [preview, setPreview] = useState('')
   const stopRef = useRef<{ stop: () => any } | null>(null), base = useRef(''), file = useRef<HTMLInputElement>(null)
   useEffect(() => () => { stopRef.current?.stop() }, [])
-  const send = async (body: { transcript?: string; image?: string }) => {
+  const send = async (body: { transcript?: string; image?: string; pdf?: string }) => {
     setBusy(true)
     try {
       const f = await api<IntakeFields>('/ai/patient-intake', { body })
@@ -164,13 +164,31 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
     catch { toast('Microphone is not available on this device.', 'err') }
   }
   const stop = () => { stopRef.current?.stop(); stopRef.current = null; setRec('idle'); setInterim('') }
-  const go = async (f: File) => { try { const img = await compressImage(f); setPreview(img); await send({ image: img }) } catch (e: any) { toast(e.message, 'err') } }
-  if (mode === 'photo') return <Modal title="Fill from a photo" width={520} onClose={onClose}>
-    <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && go(e.target.files[0])} />
+  const pick = useRef<HTMLInputElement>(null), [pdfName, setPdfName] = useState('')
+  const go = async (f: File) => {
+    try {
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+        // the host accepts about 4.5 MB per request and base64 adds a third
+        if (f.size > 3_000_000) { toast('This PDF is larger than 3 MB. Upload a smaller PDF, or a photo of the page.', 'err'); return }
+        const data = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('Could not read this file.')); r.readAsDataURL(f) })
+        setPreview(''); setPdfName(f.name); await send({ pdf: data.replace(/^data:[^;,]*/, 'data:application/pdf') })
+      } else if (f.type.startsWith('image/')) {
+        setPdfName(''); const img = await compressImage(f); setPreview(img); await send({ image: img })
+      } else toast('Choose a photo (JPG, PNG, WebP) or a PDF.', 'err')
+    } catch (e: any) { toast(e.message, 'err') }
+  }
+  if (mode === 'photo') return <Modal title="Fill from a photo or PDF" width={520} onClose={onClose}>
+    <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) go(f) }} />
+    <input ref={pick} type="file" accept="image/*,application/pdf,.pdf" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) go(f) }} />
     <div className="stack" style={{ alignItems: 'center', padding: '12px 0' }}>
       {preview && <img src={preview} alt="" style={{ maxHeight: 220, borderRadius: 8 }} />}
-      <button className="btn primary lg" disabled={busy} onClick={() => file.current?.click()}><Icon n="cam" />{busy ? `Reading… ${secs} s (usually under 20)` : 'Take or choose a photo'}</button>
-      <p className="small muted" style={{ textAlign: 'center', maxWidth: 380 }}>A registration slip, the top of an old parchi, or an ID card. You check every field before saving; nothing is saved from here.</p>
+      {pdfName && <div className="tag">{pdfName}</div>}
+      {busy ? <button className="btn primary lg" disabled>{`Reading… ${secs} s (usually under 20)`}</button>
+        : <div className="row wrap" style={{ justifyContent: 'center' }}>
+          <button className="btn primary lg" onClick={() => file.current?.click()}><Icon n="cam" />Take a photo</button>
+          <button className="btn lg" onClick={() => pick.current?.click()}><Icon n="plus" />Upload image or PDF</button>
+        </div>}
+      <p className="small muted" style={{ textAlign: 'center', maxWidth: 380 }}>A registration slip, the top of an old parchi, or an ID card. PDF up to 3 MB. You check every field before saving; nothing is saved from here.</p>
     </div>
   </Modal>
   return <Modal title="Fill by speaking" width={560} onClose={() => { stop(); onClose() }} footer={<>

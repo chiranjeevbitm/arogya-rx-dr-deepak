@@ -15,7 +15,7 @@ export function PatientPicker({ onPick, onNew, initial }: { onPick: (p: Patient)
   const [intake, setIntake] = useState<'voice' | 'photo' | null>(null)
   const fill = (f: IntakeFields) => { setNp(x => ({ name: f.name || x.name, sex: f.sex || x.sex, age_years: f.age_years ?? x.age_years, phone: f.phone || x.phone, address: f.address || x.address, allergies: f.allergies.length ? Array.from(new Set([...x.allergies, ...f.allergies])) : x.allergies })); setMode('new'); setIntake(null) }
   const dialog = intake && <IntakeDialog mode={intake} onClose={() => setIntake(null)} onFilled={fill} />
-  const quick = <div className="row wrap"><button type="button" className="btn sm" onClick={() => setIntake('voice')}><Icon n="mic" />Speak details</button><button type="button" className="btn sm" onClick={() => setIntake('photo')}><Icon n="cam" />Scan slip / parchi</button></div>
+  const quick = <div className="row wrap"><button type="button" className="btn sm" onClick={() => setIntake('voice')}><Icon n="mic" />Speak details</button><button type="button" className="btn sm" onClick={() => setIntake('photo')}><Icon n="cam" />Scan / upload slip</button></div>
   useEffect(() => {
     if (mode !== 'search') return
     const ac = new AbortController()
@@ -42,7 +42,7 @@ export function PatientPicker({ onPick, onNew, initial }: { onPick: (p: Patient)
       <input className="inp grow" placeholder="Name, mobile number or OP number" value={q} onChange={e => setQ(e.target.value)} autoFocus />
       <button type="button" className="btn primary" onClick={() => { setNp({ ...np, name: /\d/.test(q) ? '' : q, phone: /^\d+$/.test(q.replace(/\s/g, '')) ? q : '' }); setMode('new') }}>New patient</button>
     </div>
-    <div className="row wrap small muted" style={{ gap: 8 }}><span>Or add a new patient by</span><button type="button" className="btn sm" onClick={() => setIntake('voice')}><Icon n="mic" />speaking</button><button type="button" className="btn sm" onClick={() => setIntake('photo')}><Icon n="cam" />scanning a slip</button></div>
+    <div className="row wrap small muted" style={{ gap: 8 }}><span>Or add a new patient by</span><button type="button" className="btn sm" onClick={() => setIntake('voice')}><Icon n="mic" />speaking</button><button type="button" className="btn sm" onClick={() => setIntake('photo')}><Icon n="cam" />scanning or uploading a slip</button></div>
     {dialog}
     <div className="card flush"><div className="list" style={{ maxHeight: 330, overflow: 'auto' }}>
       {list.length === 0 && <div className="empty"><b>{q ? 'No patient found' : 'No patients yet'}</b>{q ? 'Check the spelling, search by mobile number, or add a new patient.' : 'Add the first patient.'}</div>}
