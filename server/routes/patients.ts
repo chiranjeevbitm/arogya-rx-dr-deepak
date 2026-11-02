@@ -58,8 +58,10 @@ r.post('/', async c => {
 
 /** `light` (used when opening a consult): only what the consult screen shows, and the 40 most recent prescriptions. */
 export async function patientDetail(cid: string, id: string, light = false) {
-  const db = sql(), none = Promise.resolve([] as any[])
-  const [[p], visits, rxs, docs, labs, bills, appts] = await Promise.all([
+  const none = Promise.resolve([] as any[])
+  // One connection, queries pipelined in one round trip. Seven separate queries on a 4-connection pool behind the
+  // Supabase pooler were the request that kept stalling (CONNECTION_DESTROYED / timeouts) on every deployment.
+  const [[p], visits, rxs, docs, labs, bills, appts] = await sql().begin(db => Promise.all([
     db`select * from arx.patients where id = ${id} and clinic_id = ${cid}`,
     light ? none : db`select id, visit_date, token, status, visit_type, complaint from arx.visits where patient_id = ${id} order by visit_date desc, token desc limit 100`,
     db`select id, rx_date, status, data->>'diagnosis' as diagnosis, data->>'complaints' as complaints, data->'vitals' as vitals, jsonb_array_length(meds) as med_count, meds, legacy_id is not null as imported
@@ -68,7 +70,7 @@ export async function patientDetail(cid: string, id: string, light = false) {
     db`select id, test, value_num::float as value_num, value_text, unit, flag, result_date, source from arx.lab_results where patient_id = ${id} and clinic_id = ${cid} order by result_date`,
     db`select id, bill_no, total::float, paid::float, mode, status, bill_date from arx.bills where patient_id = ${id} and clinic_id = ${cid} order by created_at desc limit 50`,
     light ? none : db`select id, appt_date, appt_time, status, reason, source from arx.appointments where patient_id = ${id} and clinic_id = ${cid} and appt_date >= ${istToday()} order by appt_date`,
-  ])
+  ]))
   if (!p) throw new HttpError(404, 'Patient not found.')
   return { patient: p, visits, prescriptions: rxs, documents: docs, labs, bills, upcoming: appts }
 }
