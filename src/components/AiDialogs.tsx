@@ -18,7 +18,7 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
   const [busy0, setBusy] = useState(false), [draft, setDraft] = useState<VoiceDraft | null>(null)
-  const { text, setText, interim, rec, transcribing, start, stop } = useDictation(lang, toast), busy = busy0 || transcribing, secs = useElapsed(busy0)
+  const dict = useDictation(lang, toast), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
   const [keep, setKeep] = useState<Record<string, boolean>>({}), [medSel, setMedSel] = useState<(Med | null)[]>([])
   const make = async () => {
     stop(); setBusy(true)
@@ -33,15 +33,8 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
     <button className="btn primary" disabled={busy || text.trim().length < 5} onClick={make}>{busy ? `Making draft… ${secs} s (usually under 30)` : 'Make draft'}</button>
   </>}>
     <div className="stack">
-      <div className="row wrap">
-        <div className="seg"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={rec !== 'idle'}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={rec !== 'idle'}>English</button></div>
-        <span className="grow" />
-        {rec === 'idle' ? <button className="btn primary lg" disabled={transcribing} onClick={start}><Icon n="mic" />{transcribing ? 'Turning speech into text…' : 'Start speaking'}</button>
-          : <button className="btn danger lg" onClick={stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop</button>}
-      </div>
+      <VoiceBar d={dict} lang={lang} setLang={setLang} />
       <textarea className="inp" rows={7} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Teen din se bukhar aur gale mein dard. BP 120 by 80, temperature 101. Viral fever. Dolo 650 teen baar khane ke baad teen din, Levocetirizine raat ko paanch din. CBC. Teen din baad dikhayein." />
-      {rec === 'audio' && <div className="alert info small">Recording. Speak now, then press Stop. The audio is turned into text on the server (live text is not available here).</div>}
-      {rec === 'idle' && !text && <p className="tiny muted">{liveSpeech().why}</p>}
     </div>
   </Modal>
 
@@ -151,7 +144,7 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
   const toast = useToast()
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>('hi-IN')
   const [busy0, setBusy] = useState(false), [preview, setPreview] = useState('')
-  const { text, setText, interim, rec, transcribing, start, stop } = useDictation(lang, toast), busy = busy0 || transcribing, secs = useElapsed(busy0)
+  const dict = useDictation(lang, toast), { text, setText, interim, rec, transcribing, stop } = dict, busy = busy0 || transcribing, secs = useElapsed(busy0)
   const file = useRef<HTMLInputElement>(null)
   const send = async (body: { transcript?: string; image?: string; pdf?: string }) => {
     setBusy(true)
@@ -193,14 +186,24 @@ export function IntakeDialog({ mode, onClose, onFilled }: { mode: 'voice' | 'pho
     <button className="btn primary" disabled={busy || text.trim().length < 3} onClick={() => { stop(); send({ transcript: text }) }}>{busy ? `Filling… ${secs} s` : 'Fill the form'}</button>
   </>}>
     <div className="stack">
-      <div className="row wrap">
-        <div className="seg"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={rec !== 'idle'}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={rec !== 'idle'}>English</button></div>
-        <span className="grow" />
-        {rec === 'idle' ? <button className="btn primary lg" disabled={transcribing} onClick={start}><Icon n="mic" />{transcribing ? 'Turning speech into text…' : 'Start speaking'}</button>
-          : <button className="btn danger lg" onClick={stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop</button>}
-      </div>
+      <VoiceBar d={dict} lang={lang} setLang={setLang} />
       <textarea className="inp" rows={4} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Ramesh Kumar, 45 saal, male, mobile 98765 43210, gaon Bochaha, Muzaffarpur. Sulfa se allergy hai." />
-      {rec === 'audio' && <div className="alert info small">Recording. Speak now, then press Stop. The audio is turned into text on the server (live text is not available here).</div>}
     </div>
   </Modal>
+}
+
+/** Language, Record / Live text choice, Start/Stop with a microphone level meter and seconds, and a plain status line. */
+function VoiceBar({ d, lang, setLang }: { d: ReturnType<typeof useDictation>; lang: 'hi-IN' | 'en-IN'; setLang: (l: 'hi-IN' | 'en-IN') => void }) {
+  const idle = d.rec === 'idle', ls = liveSpeech()
+  return <div className="stack tight">
+    <div className="row wrap">
+      <div className="seg" role="group" aria-label="Language"><button aria-pressed={lang === 'hi-IN'} onClick={() => setLang('hi-IN')} disabled={!idle}>Hinglish / Hindi</button><button aria-pressed={lang === 'en-IN'} onClick={() => setLang('en-IN')} disabled={!idle}>English</button></div>
+      <div className="seg" role="group" aria-label="How to turn speech into text"><button aria-pressed={d.mode === 'record'} onClick={() => d.setMode('record')} disabled={!idle} title="Record, then the server writes it (works everywhere, best for Hinglish)">Record</button><button aria-pressed={d.mode === 'live'} onClick={() => d.setMode('live')} disabled={!idle || !ls.ok} title={ls.ok ? 'Words appear while you speak (Chrome/Edge)' : ls.why}>Live text</button></div>
+      <span className="grow" />
+      {idle ? <button className="btn primary lg" disabled={d.transcribing} onClick={d.start}><Icon n="mic" />{d.transcribing ? 'Turning speech into text…' : 'Start speaking'}</button>
+        : <button className="btn danger lg" onClick={d.stop}><span className="mic-live"><i /><i /><i /><i /></span>Stop · {d.secs} s</button>}
+    </div>
+    {d.rec === 'audio' && <div className="vu" aria-label="Microphone level"><span style={{ width: `${Math.round(d.level * 100)}%` }} /></div>}
+    {d.status && <p className={'small ' + (/not|no |blocked|failed|could|wrong|credit|limit/i.test(d.status) && !/^Recording|^Listening|^Turning/.test(d.status) ? 'err-text' : 'muted')} role="status">{d.status}</p>}
+  </div>
 }

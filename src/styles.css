@@ -525,3 +525,8 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .sk-line { display: block; height: 10px; width: 80%; border-radius: 5px; background: var(--desk-2); margin: 4px 0; animation: sk-pulse 1.2s ease-in-out infinite alternate } .sk-line.short { width: 50% }
 @keyframes sk-pulse { from { opacity: .55 } to { opacity: 1 } }
 .tl.visit-only b { font-weight: 600 } .tl.visit-only::before { border-color: var(--faint) } .tl.visit-only .d { color: var(--faint) }
+
+/* voice: microphone level meter and error line */
+.vu { height: 6px; border-radius: 99px; background: var(--desk-2); overflow: hidden }
+.vu > span { display: block; height: 100%; background: var(--neem); border-radius: 99px; transition: width .08s linear }
+.err-text { color: var(--sindoor); font-weight: 600 }
