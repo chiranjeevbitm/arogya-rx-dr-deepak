@@ -27,7 +27,7 @@ Rules:
 - Frequency: "subah" 1-0-0; "dopahar" 0-1-0; "raat/raat ko/sote samay" 0-0-1; "subah shaam/do baar/BD" 1-0-1; "teen baar/TDS" 1-1-1; "char baar/QID" 1-1-1-1; "zaroorat par/SOS" SOS; "hafte mein ek" Weekly; "OD" 1-0-0.
 - Timing: "khane ke baad" after; "khane se pehle/nashte se pehle" before; "khali pet" empty.
 - Duration: "paanch din" 5; "ek hafta" 7; "do hafte" 14; "ek mahina" 30; "teen mahine" 90. Use duration_text only for things like "continue".
-- Dose is the amount per intake ("1", "½", "10 ml", "2 puffs"); default "1" for tablets/capsules if not said.
+- Dose is the amount taken each time: a count of tablets ("1", "½", "2"), or "10 ml", "2 puffs". NEVER put the strength (25 mg, 100 mg, 12.5 mcg) in dose; strength goes in strength. Default "1" for tablets/capsules if not said.
 - BP like "138 by 86" becomes "138/86". Temperature in °F. Sugar/GRBS in mg/dL.
 - follow_up_days from phrases like "5 din baad dikhayein".`
 
@@ -42,6 +42,18 @@ async function ground(clinicId: string, name: string, strength: string) {
       and lower(name) operator(extensions.%) ${q} order by extensions.similarity(lower(name), ${q}) desc, (kind = 'ja') desc limit 5`
   const candidates = [...fav.map(f => ({ name: f.name, kind: f.defaults?.kind || 'brand', favourite: true })), ...cat.map(x => ({ name: x.name, kind: x.kind, price: x.price }))]
   return candidates.filter((x, i, a) => a.findIndex(y => y.name.toLowerCase() === x.name.toLowerCase()) === i).slice(0, 5)
+}
+
+/** The model sometimes copies the strength ("25", "100", "12.5") into the dose. For tablets and capsules a dose is a count of 4 or fewer. */
+function sane(dose: string | undefined, form: string, strength: string | undefined) {
+  const d = (dose || '').trim()
+  if (!d) return defaultDose(form as any)
+  if (['TAB', 'CAP', 'ROTACAP', 'SACHET'].includes(form)) {
+    const n = parseFloat(d.replace('½', '.5').replace('¼', '.25'))
+    const s = parseFloat(String(strength || '').replace(/[^\d.]/g, ''))
+    if (!isNaN(n) && (n > 4 || (!isNaN(s) && n === s && n > 2))) return defaultDose(form as any)
+  }
+  return d
 }
 
 r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
@@ -59,7 +71,7 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
   for (const m of out.meds || []) {
     const candidates = await ground(u.clinic_id, m.name, m.strength)
     const form = m.form || detectForm(candidates[0]?.name || m.name)
-    meds.push({ spoken: [m.name, m.strength].filter(Boolean).join(' '), candidates, med: { name: candidates[0]?.name || [m.name, m.strength].filter(Boolean).join(' '), kind: (candidates[0]?.kind as any) || 'custom', form, dose: m.dose || defaultDose(form), route: defaultRoute(form), freq: normFreq(m.freq), timing: m.timing || '', days: m.days, duration: m.duration_text || '', instructions: m.instructions || '' } })
+    meds.push({ spoken: [m.name, m.strength].filter(Boolean).join(' '), candidates, med: { name: candidates[0]?.name || [m.name, m.strength].filter(Boolean).join(' '), kind: (candidates[0]?.kind as any) || 'custom', form, dose: sane(m.dose, form, m.strength), route: defaultRoute(form), freq: normFreq(m.freq), timing: m.timing || '', days: m.days, duration: m.duration_text || '', instructions: m.instructions || '' } })
   }
   await audit(c, 'ai.voice_rx', 'patient', b.patient_id ?? null, { meds: meds.length })
   return c.json({ ...out, meds })
@@ -79,13 +91,16 @@ const SCAN_SCHEMA = S({
   labs: { type: 'array', items: S({ test: str, value: str, unit: str, ref_range: str, flag: { type: 'string', enum: ['low', 'high', 'normal', 'abnormal', ''] } }) },
   notes: str,
 })
-const SCAN_SYSTEM = `You read a phone photo of an Indian medical document (an old prescription, often handwritten, or a printed lab report) and extract structured data for a doctor to review.
+const SCAN_SYSTEM = `You read a phone photo of an Indian medical document (an old prescription, usually handwritten on a printed clinic parchi, or a printed lab report) and extract structured data for a doctor to review.
 Rules:
-- Transcribe only what is visible. If a word is unreadable, skip it rather than guess. Set legible=false if most of the page is unreadable.
-- Medicines: name and strength as written (expand common abbreviations: Tab, Cap, Syp), dose/frequency as written (e.g. 1-0-1, BD, OD), duration.
-- Labs: one row per test with the numeric value, unit, reference range and flag (low/high/normal) if printed or obvious from the range.
-- doc_date as YYYY-MM-DD if a date is printed.
-- notes: anything else clinically useful in one or two lines.`
+- Doctors' handwriting is normally readable with effort. ALWAYS attempt it: give your best reading of every medicine, diagnosis and finding, and add "?" after a word you are unsure of. Skip a word only if it is truly impossible to read.
+- Set legible=false ONLY when you can read almost nothing. A tilted photo, glare or untidy handwriting is not a reason for legible=false.
+- Typical parchi layout: printed header (clinic and doctor), printed side column of vitals and comorbidities (ignore the blank printed labels), then handwritten: date, patient name, age/sex, chief complaints, provisional diagnosis, investigation findings (2D Echo, ECG, labs with dates), and a numbered list of medicines after "Adv" or "Rx" with Tab./Cap./Syp./Inj., strength, dose pattern (1-0-1, 1x1, BD, OD, HS) and days, then referral or follow-up.
+- Medicines: name and strength as written (Indian brands such as Dytor Plus, Met XL, Ecosprin Gold, Pantocid-L, Thyronorm), dose pattern in freq (e.g. 1-0-1 or "1 morning"), and duration if written.
+- diagnoses: the conditions and key findings named (for example "ASD 25 mm ostium secundum", "hypothyroidism", "RBBB"). allergies only if written.
+- Labs: one row per test with value, unit, reference range and flag (low/high/normal) if printed or obvious from the range.
+- doc_date as YYYY-MM-DD from the "Reg. Date" or any printed date (20/10/26 means 2026-10-20).
+- notes: investigation findings (echo, ECG) and referral in one or two lines.`
 
 r.post('/scan', async c => {
   const b = await body(c, z.object({ patient_id: z.string().uuid(), image: z.string().max(8_000_000) }))
@@ -96,7 +111,7 @@ r.post('/scan', async c => {
   const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
   if (!p) throw new HttpError(404, 'Patient not found.')
   const file = await putFile({ clinicId: u.clinic_id, kind: 'scan', mime: m[1], data: Buffer.from(m[3], 'base64'), userId: u.id })
-  const out = await aiJson<any>({ kind: 'scan', clinicId: u.clinic_id, userId: u.id, system: SCAN_SYSTEM, schemaName: 'medical_document', schema: SCAN_SCHEMA, effort: 'low', maxTokens: 8000,
+  const out = await aiJson<any>({ kind: 'scan', clinicId: u.clinic_id, userId: u.id, system: SCAN_SYSTEM, schemaName: 'medical_document', schema: SCAN_SCHEMA, effort: 'medium', maxTokens: 16000,
     parts: [{ type: 'input_text', text: 'Extract this document.' }, { type: 'input_image', image_url: b.image, detail: 'high' }] })
   const docDate = /^\d{4}-\d{2}-\d{2}$/.test(out.doc_date) && out.doc_date <= istToday() ? out.doc_date : null
   const [doc] = await sql()`insert into arx.documents (clinic_id, patient_id, file_id, kind, doc_date, extracted, created_by)
