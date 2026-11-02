@@ -67,7 +67,7 @@ export default function MedSearch({ onPick, autoFocus }: { onPick: (m: Med) => v
       {term.length < 2 && <div className="tiny muted" style={{ padding: '6px 12px' }}>{favs.some(h => h.favourite) ? 'Your most used medicines' : 'Common medicines. Type 2 or more letters to search all 9,900.'}</div>}
       {opts.map((h, i) => h ? <button type="button" key={h.name + i} className={'ac-item' + (i === hl ? ' hl' : '')} onMouseEnter={() => setHl(i)} onClick={() => pick(h)} role="option" aria-selected={i === hl}>
         <span className="grow"><span className="nm">{h.name}</span><br /><span className="meta">{h.favourite ? `Your usual: ${[h.defaults?.dose, h.defaults?.freq, h.defaults?.days ? h.defaults.days + ' days' : ''].filter(Boolean).join(', ')}` : [h.manufacturer, h.category, h.pack].filter(Boolean).join(', ')}</span></span>
-        {h.favourite ? <span className="tag ink">Used {h.uses}×</span> : h.kind === 'ja' ? <span className="tag green">Jan Aushadhi{h.price ? ' ' + inr(h.price) : ''}</span> : h.kind === 'custom' ? <span className="tag">Added by you</span> : null}
+        {h.favourite ? <span className="tag ink">Used {h.uses}×</span> : h.kind === 'custom' ? <span className="tag">Added by you</span> : null}
       </button> : <button type="button" key="custom" className={'ac-item' + (i === hl ? ' hl' : '')} onMouseEnter={() => setHl(i)} onClick={() => pick(null)}>
         <span className="grow"><span className="nm">Add “{q.trim()}” as typed</span><br /><span className="meta">Not in the list. It will be saved for next time.</span></span>
       </button>)}

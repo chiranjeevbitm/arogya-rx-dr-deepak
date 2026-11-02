@@ -29,7 +29,6 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const [templates, setTemplates] = useState<Template[]>([]), [hist, setHist] = useState<Hist | null>(null)
   const [voice, setVoice] = useState(false), [scan, setScan] = useState(false), [editPt, setEditPt] = useState(false), [override, setOverride] = useState<{ msg: string; then: () => void } | null>(null)
   const [wa, setWa] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [busy, setBusy] = useState(false)
-  const [ja, setJa] = useState<Record<string, { name: string; price: number } | null>>({})
   const [now, setNow] = useState(Date.now())
   const first = useRef(true), page = useRef<HTMLDivElement>(null), ver = useRef<string | null>(null), conflictOpen = useRef(false), inflight = useRef<Promise<void>>(Promise.resolve())   // version last loaded or saved on this device
   const out = useRxOutput(rxId, page, !!b?.rx.pdf_file_id)
@@ -70,20 +69,10 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     return () => clearTimeout(t)
   }, [data, meds]) // eslint-disable-line
   useEffect(() => { const f = (e: BeforeUnloadEvent) => { if (saved !== 'saved') e.preventDefault() }; window.addEventListener('beforeunload', f); return () => window.removeEventListener('beforeunload', f) }, [saved])
-  // Jan Aushadhi alternatives for the cost box
-  useEffect(() => { meds.forEach(m => { if (m.kind !== 'ja' && !(m.name in ja)) api<any>('/medicines/ja?name=' + encodeURIComponent(m.name)).then(r => setJa(x => ({ ...x, [m.name]: r }))).catch(() => setJa(x => ({ ...x, [m.name]: null }))) }) }, [meds]) // eslint-disable-line
+
 
   const patient = b?.patient
   const alerts = useMemo(() => !patient ? [] : safetyChecks(meds, { allergies: patient.allergies, conditions: [...(patient.conditions || []), ...Object.keys(data.comorbid || {}).filter(k => data.comorbid?.[k])], egfr: parseFloat(data.comorbid_details?.ckd?.egfr) || null, age: patient.age_years }), [meds, patient, data.comorbid, data.comorbid_details])
-  const cost = useMemo(() => {
-    let branded = 0, jan = 0, known = 0
-    for (const m of meds) {
-      const alt = m.kind === 'ja' ? { price: m.price || 0 } : ja[m.name]
-      if (!alt?.price) continue
-      known++; jan += alt.price; branded += m.kind === 'ja' ? (m.price || 0) * 3 : (m.price || alt.price * 3)
-    }
-    return { branded, jan, save: Math.max(0, branded - jan), known }
-  }, [meds, ja])
   const set = <K extends keyof RxData>(k: K, v: RxData[K]) => { if (!final) setData(d => ({ ...d, [k]: v })) }
   const setV = (k: keyof Vitals, v: string) => set('vitals', { ...(data.vitals || {}), [k]: v })
   const setMed = (i: number, p: Partial<Med>) => setMeds(ms => ms.map((m, j) => j === i ? { ...m, ...p } : m))
@@ -119,7 +108,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     setBusy(true); finalizing.current = true
     try {
       await inflight.current.catch(() => {})   // a draft save already on its way finishes first, so it cannot land after the prescription is final
-      const r = await api<{ already?: boolean }>(`/rx/${rxId}/finalize`, { body: { data: { ...data, cost: cost.known ? { branded: cost.branded, jan: cost.jan, save: cost.save } : undefined }, meds, override_alerts: overrideAlerts } })
+      const r = await api<{ already?: boolean }>(`/rx/${rxId}/finalize`, { body: { data, meds, override_alerts: overrideAlerts } })
       if (r?.already) await load()   // it was already final (another device, or a retry): show what is stored, not what this screen had
       setSaved('saved'); setOverride(null); out.reset()
       if (!r?.already) setB(x => x && { ...x, rx: { ...x.rx, status: 'final', pdf_file_id: null } })
@@ -185,13 +174,12 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
         <input id="in-dx" className="inp" value={data.diagnosis || ''} onChange={e => set('diagnosis', e.target.value)} placeholder="Provisional diagnosis" />
       </fieldset>
 
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Medicines</span><span className="tag green">Jan Aushadhi price shown</span></div>
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Medicines</span></div>
         {!ro && regular.length > 0 && <div className="chips" aria-label="Regular medicines"><span className="lbl" style={{ alignSelf: 'center' }}>★ Regular</span>{regular.map(r => <button key={r.name} type="button" className="chip" onClick={() => setMeds(ms => ms.some(m => m.name === r.name) ? ms : [...ms, medFromHit({ name: r.name, defaults: r.defaults })])}>+ {r.name}</button>)}</div>}
         {!ro && <MedSearch onPick={m => setMeds(ms => [...ms, m])} />}
         {meds.length === 0 ? <p className="small muted">Tap a template, search for a medicine, or speak the consult.</p> :
-          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} ja={m.kind !== 'ja' ? ja[m.name] : null} regular={isRegular(m.name)} onStar={() => toggleRegular(m)} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
+          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} regular={isRegular(m.name)} onStar={() => toggleRegular(m)} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
         {alerts.map((a, i) => <div key={i} className={'alert ' + a.level}><b>{a.level === 'crit' ? 'Stop' : a.level === 'warn' ? 'Check' : 'Note'}</b><span>{a.text}</span></div>)}
-        {cost.known > 0 && <div className="cost"><div><span>Branded</span><b>{inr(cost.branded)}</b></div><div><span>Jan Aushadhi</span><b>{inr(cost.jan)}</b></div><div className="save"><span>Patient saves</span><b>{inr(cost.save)}</b></div></div>}
       </fieldset>
 
       <details className="sec">
@@ -281,14 +269,13 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   </>
 }
 
-function MedRow({ i, m, set, remove, move, alerted, ja, ro, regular, onStar }: { regular: boolean; onStar: () => void; i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ja?: { name: string; price: number } | null; ro: boolean }) {
+function MedRow({ i, m, set, remove, move, alerted, ro, regular, onStar }: { regular: boolean; onStar: () => void; i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ro: boolean }) {
   const [more, setMore] = useState(false)
   return <div className={'medrow' + (alerted ? ' alerted' : '') + (more ? ' expanded' : '')}>
     <span className="sn">{i + 1}</span>
     <div style={{ minWidth: 0 }}>
       <div className="nm nm-line">{m.form ? <span className="faint">{m.form}.</span> : null}
         {ro ? <span>{m.name}</span> : <input className="nm-edit" value={m.name} aria-label="Medicine name (edit to change)" title="Click to edit the medicine name" onChange={e => set(m.kind === 'ja' || m.kind === 'brand' ? { name: e.target.value, kind: 'custom', price: null } : { name: e.target.value })} />}
-        {m.kind === 'ja' && m.price ? <span className="tag green">JA {inr(m.price)}</span> : null}
         {!ro && <button type="button" className={'icon-btn star' + (regular ? ' on' : '')} onClick={onStar} aria-pressed={regular} aria-label={regular ? 'Remove from regular medicines' : 'Add to regular medicines'} title={regular ? 'Regular medicine (click to remove)' : 'Add to regular medicines'}>{regular ? '★' : '☆'}</button>}</div>
       <div className="hi">{sigHi(m)}</div>
     </div>
@@ -310,7 +297,6 @@ function MedRow({ i, m, set, remove, move, alerted, ja, ro, regular, onStar }: {
       <button type="button" className="btn sm" onClick={() => move(-1)}>Up</button><button type="button" className="btn sm" onClick={() => move(1)}>Down</button>
       <button type="button" className="btn sm danger" onClick={remove}><Icon n="trash" />Remove</button>
     </div>}
-    {ja && !more && !ro && <div className="med-more tiny"><span className="tag green">Jan Aushadhi {inr(ja.price)}</span><span className="muted ellipsis" style={{ maxWidth: 300 }}>{ja.name}</span><button type="button" className="btn sm ghost" onClick={() => set({ name: ja.name, kind: 'ja', price: ja.price })}>Use it</button></div>}
   </div>
 }
 
