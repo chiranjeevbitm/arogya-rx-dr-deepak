@@ -27,6 +27,10 @@ export default function PatientPage({ id: pid }: { id?: string }) {
   if (d.error) return <div className="empty"><b>Patient not found</b>{d.error}</div>
   const { patient: p, prescriptions, visits, documents, bills, upcoming, labs } = d.data
   const isDoc = me.user.role !== 'reception'
+  // prescriptions, plus visits that have no prescription that day (e.g. rows brought in from the paper OPD register), newest first
+  const rxDays = new Set(prescriptions.map((r: any) => d10(r.rx_date)))
+  const history = [...prescriptions.map((r: any) => ({ kind: 'rx', d: d10(r.rx_date), r })), ...visits.filter((v: any) => !rxDays.has(d10(v.visit_date))).map((v: any) => ({ kind: 'visit', d: d10(v.visit_date), v }))]
+    .sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : a.kind === 'rx' ? -1 : 1))
   const newRx = async () => { try { const r = await api<{ rx_id: string }>('/rx', { body: { patient_id: p.id } }); nav(`/opd/${r.rx_id}`) } catch (e: any) { toast(e.message, 'err') } }
   const queue = async () => { try { const v = await api<any>('/visits', { body: { patient_id: p.id } }); toast(`Token ${v.token} given`, 'ok'); d.reload() } catch (e: any) { toast(e.message, 'err') } }
   return <div className="stack">
@@ -44,13 +48,17 @@ export default function PatientPage({ id: pid }: { id?: string }) {
     {upcoming.length > 0 && <div className="alert info small"><Icon n="cal" size={18} /><span>Next appointment: {upcoming.map((a: any) => `${fmtDate(d10(a.appt_date))}${a.time ? ' ' + a.time : ''}`).join(', ')}</span></div>}
     <div className="ptgrid">
       <section className="card stack">
-        <div className="fs-h"><span className="lbl">Visit history</span><span className="small muted">{prescriptions.length} prescription{prescriptions.length === 1 ? '' : 's'}</span></div>
-        {prescriptions.length === 0 ? <div className="timeline"><div className="tl"><b>First visit</b><p>No earlier records. Use photo intake to add old prescriptions.</p></div></div> :
-          <div className="timeline">{prescriptions.map((r: any) => <Link key={r.id} to={r.status === 'final' ? `/rx/${r.id}` : `/opd/${r.id}`} className="tl" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-            <div className="d">{fmtDate(d10(r.rx_date))}{r.status !== 'final' ? ' · draft' : ''}{r.imported ? ' · from old app' : ''}</div>
-            <b>{r.diagnosis || r.complaints || 'No diagnosis written'}</b>
-            <p>{(r.meds || []).map((m: any) => m.name).join(', ') || 'No medicines'}{r.vitals?.bp ? ` · BP ${r.vitals.bp}` : ''}{r.vitals?.grbs ? ` · GRBS ${r.vitals.grbs}` : ''}</p>
-          </Link>)}</div>}
+        <div className="fs-h"><span className="lbl">Visit history</span><span className="small muted">{visits.length} visit{visits.length === 1 ? '' : 's'} · {prescriptions.length} prescription{prescriptions.length === 1 ? '' : 's'}</span></div>
+        {history.length === 0 ? <div className="timeline"><div className="tl"><b>First visit</b><p>No earlier records. Use photo intake to add old prescriptions.</p></div></div> :
+          <div className="timeline">{history.map((h: any) => h.kind === 'rx' ? <Link key={h.r.id} to={h.r.status === 'final' ? `/rx/${h.r.id}` : `/opd/${h.r.id}`} className="tl" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <div className="d">{fmtDate(d10(h.r.rx_date))}{h.r.status !== 'final' ? ' · draft' : ''}{h.r.imported ? ' · from old app' : ''}</div>
+            <b>{h.r.diagnosis || h.r.complaints || 'No diagnosis written'}</b>
+            <p>{(h.r.meds || []).map((m: any) => m.name).join(', ') || 'No medicines'}{h.r.vitals?.bp ? ` · BP ${h.r.vitals.bp}` : ''}{h.r.vitals?.grbs ? ` · GRBS ${h.r.vitals.grbs}` : ''}</p>
+          </Link> : <div key={h.v.id} className="tl visit-only">
+            <div className="d">{fmtDate(d10(h.v.visit_date))}{h.v.source === 'opd_register' ? ' · OPD register' : h.v.status !== 'done' ? ' · ' + (h.v.status === 'waiting' ? 'waiting' : 'with doctor') : ''}</div>
+            <b>{h.v.visit_type === 'new' ? 'First visit' : 'Follow-up visit'}{h.v.vitals?.session ? (h.v.vitals.session === 'am' ? ', morning' : ', evening') : ''}</b>
+            <p>{[h.v.complaint, h.v.vitals?.weight ? `Weight ${h.v.vitals.weight} kg` : '', h.v.source === 'opd_register' && !h.v.complaint ? 'Seen before Arogya Rx; no prescription on record' : ''].filter(Boolean).join(' · ') || 'No prescription written for this visit'}</p>
+          </div>)}</div>}
       </section>
       <aside className="stack">
         <section className="card stack">
@@ -63,7 +71,7 @@ export default function PatientPage({ id: pid }: { id?: string }) {
         {BILLING_ENABLED && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2 className="grow">Bills</h2><button className="btn sm" onClick={() => setBill(true)}><Icon n="plus" />Bill</button></div>
           {bills.length === 0 ? <div className="empty small">No bills.</div> : <div className="list">{bills.map((x: any) => <button key={x.id} className="li" onClick={() => setReceipt(x.id)}><span className="grow">#{x.bill_no}, {fmtDate(d10(x.bill_date))}</span><span className={'tag ' + (x.status === 'void' ? '' : x.status === 'due' ? 'amber' : 'green')}>{x.status === 'void' ? 'Cancelled' : x.status === 'due' ? 'Unpaid' : inr(x.paid)}</span></button>)}</div>}
         </section>}
-        {visits.length > 0 && <p className="small faint">{visits.length} clinic visit{visits.length > 1 ? 's' : ''} since {fmtDate(d10(visits[visits.length - 1].visit_date))}.</p>}
+        {visits.length > 0 && <p className="small faint">Coming since {fmtDate(d10(visits[visits.length - 1].visit_date))}.</p>}
       </aside>
     </div>
     {edit && <EditPatient p={p} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); d.reload() }} />}

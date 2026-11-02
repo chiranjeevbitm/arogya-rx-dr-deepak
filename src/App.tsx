@@ -9,6 +9,7 @@ import Setup from './pages/Setup'
 import Book from './pages/Book'
 
 const Opd = lazy(() => import('./pages/Opd'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Patients = lazy(() => import('./pages/Patients'))
 const RxView = lazy(() => import('./pages/RxView'))
 const Appointments = lazy(() => import('./pages/Appointments'))
@@ -27,7 +28,8 @@ export default function App() {
     <Suspense fallback={<Spinner />}>
       <Routes>
         <Route path="/" element={<Navigate to="/opd" replace />} />
-        <Route path="/opd" element={<Opd />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/opd" element={<OpdOrDashboard />} />
         <Route path="/opd/:rxId" element={<Opd />} />
         <Route path="/consult/:rxId" element={<RedirectConsult />} />
         <Route path="/intake" element={<Navigate to="/schedule" replace />} />
@@ -50,6 +52,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   // four everyday screens plus Settings; Home, Intake and the old "Ask" box now live inside them
   const nav = [
     { to: '/opd', n: 'rx', label: 'OPD & Rx', tab: true },
+    { to: '/dashboard', n: 'chart', label: 'Dashboard', tab: true },
     { to: '/patients', n: 'users', label: 'Patients', tab: true },
     { to: '/schedule', n: 'cal', label: 'Schedule', tab: true },
     ...(BILLING_ENABLED ? [{ to: '/billing', n: 'rupee', label: 'Billing', tab: true }] : []),
@@ -59,7 +62,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const toggle = () => setSlim(s => { const v = !s; try { localStorage.setItem('arx.rail', v ? '1' : '0') } catch { /* private mode */ } return v })
   // warm up the other screens and the medicine list while the doctor is busy, so every click after is instant
   useEffect(() => {
-    const warm = () => { import('./pages/Opd'); import('./pages/Patients'); import('./pages/Appointments'); if (BILLING_ENABLED) import('./pages/Billing'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
+    const warm = () => { import('./pages/Opd'); import('./pages/Dashboard'); import('./pages/Patients'); import('./pages/Appointments'); if (BILLING_ENABLED) import('./pages/Billing'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
     const ric = (window as any).requestIdleCallback as undefined | ((f: () => void, o?: any) => number)
     if (ric) ric(warm, { timeout: 3000 }); else setTimeout(warm, 1500)
   }, [])
@@ -85,5 +88,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <nav className="tabbar no-print">{nav.filter(x => x.tab).map(x => <NavLink key={x.to} to={x.to} className={({ isActive }) => (isActive ? 'active' : '')}><Icon n={x.n} />{x.label}</NavLink>)}</nav>
   </div>
 }
+
+/** Old bookmarks of /opd?view=dashboard now go to the Dashboard page. */
+function OpdOrDashboard() { const loc = useLocation(); return new URLSearchParams(loc.search).get('view') === 'dashboard' ? <Navigate to="/dashboard" replace /> : <Opd /> }
 
 function RedirectConsult() { const { rxId } = useParams(); return <Navigate to={`/opd/${rxId}`} replace /> }

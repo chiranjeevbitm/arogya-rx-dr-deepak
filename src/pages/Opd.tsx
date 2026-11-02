@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex, istToday } from '../lib/format'
@@ -8,25 +8,17 @@ import { useAsync, useLive, useToast } from '../components/ui'
 import Icon from '../components/Icon'
 import ConsultPane from './Consult'
 import Today, { AddToQueue } from './Today'
-import OpdDashboard from '../components/OpdDashboard'
 
 type Visit = { id: string; token: number; status: string; name: string; sex: string | null; age_years: number | null; complaint: string | null; allergies: string[]; rx_id: string | null; rx_status: string | null; last_rx_date: string | null; started_at: string | null; finished_at: string | null; patient_id: string }
 const fmtT = (s: number) => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0')
 
 export default function Opd() {
   const me = useMe()
-  const [sp, setSp] = useSearchParams()
-  if (me.user.role !== 'reception') return <DoctorOpd />
-  const dash = sp.get('view') === 'dashboard'
-  return <>
-    <div className="seg" role="group" aria-label="Screen" style={{ margin: '0 0 12px' }}><button type="button" aria-pressed={!dash} onClick={() => setSp({})}>Today</button><button type="button" aria-pressed={dash} onClick={() => setSp({ view: 'dashboard' })}>Dashboard</button></div>
-    {dash ? <OpdDashboard /> : <Today />}
-  </>
+  return me.user.role !== 'reception' ? <DoctorOpd /> : <Today />
 }
 
 function DoctorOpd() {
-  const { rxId } = useParams(), nav = useNavigate(), toast = useToast(), [sp, setSp] = useSearchParams()
-  const dashView = sp.get('view') === 'dashboard' && !rxId
+  const { rxId } = useParams(), nav = useNavigate(), toast = useToast()
   const q = useAsync(() => api<Visit[]>('/visits'), [], 'visits')
   const [adding, setAdding] = useState(false)
   useLive(q.reload, 10000)   // new tokens from reception show up on their own
@@ -68,9 +60,8 @@ function DoctorOpd() {
   }, [q.data]) // eslint-disable-line
   return <div className="stack">
     <div className="page-h"><div className="grow"><h1>OPD &amp; Rx</h1><p>Call a token, tap a template or speak the consult. The parchi on the right is exactly what prints.</p></div>
-      <div className="seg" role="group" aria-label="Screen"><button type="button" aria-pressed={!dashView} onClick={() => { setSp({}); if (rxId) nav('/opd') }}>Consult</button><button type="button" aria-pressed={dashView} onClick={() => { if (rxId) nav('/opd?view=dashboard'); else setSp({ view: 'dashboard' }) }}>Dashboard</button></div>
       <button className="btn" onClick={() => setAdding(true)}><Icon n="plus" />Add patient</button></div>
-    <div className="opd" ref={box} style={{ ['--side-w' as any]: sideW + 'px', ...(dashView ? { gridTemplateColumns: 'minmax(0, 1fr)' } : {}) }}>
+    <div className="opd" ref={box} style={{ ['--side-w' as any]: sideW + 'px' }}>
       <aside className="queue">
         <h3><span>Tokens</span> <span className="mono">{list.filter(v => v.status === 'done').length}/{list.length}</span></h3>
         {list.length === 0 && <p className="small muted">No tokens yet today. Reception adds patients, or use Add patient.</p>}
@@ -95,8 +86,8 @@ function DoctorOpd() {
               <div className="grow">{waiting[0] ? <><div style={{ font: '700 20px var(--f-head)' }}>Next: token {waiting[0].token}, {waiting[0].name}</div><div style={{ opacity: .85 }}>{ageSex(waiting[0])}{waiting[0].complaint ? ` · ${waiting[0].complaint}` : ''}</div></> : <div style={{ font: '700 18px var(--f-head)' }}>No one is waiting.</div>}</div>
               <button className="btn lg" disabled={!waiting.length} onClick={next}>Call next patient</button>
             </div>
-            {dashView ? <OpdDashboard /> : <p className="muted small">Pick a token on the left to open the consult. Templates, voice, safety checks and the live parchi are all here.</p>}
-          </div>{dashView ? null : <aside className="opd-side">{splitter}<div className="side-h"><b>Live parchi</b><span className="tag">opens with a token</span></div><div className="empty small">Call a token to start a prescription.</div></aside>}</>}
+            <p className="muted small">Pick a token on the left to open the consult. Templates, voice, safety checks and the live parchi are all here.</p>
+          </div><aside className="opd-side">{splitter}<div className="side-h"><b>Live parchi</b><span className="tag">opens with a token</span></div><div className="empty small">Call a token to start a prescription.</div></aside></>}
     </div>
     {adding && <AddToQueue onClose={() => setAdding(false)} onDone={() => { setAdding(false); q.reload() }} />}
   </div>

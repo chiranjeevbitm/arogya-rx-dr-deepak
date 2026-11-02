@@ -33,6 +33,23 @@ export async function createPatient(tx: any, clinicId: string, p: z.infer<typeof
   return row
 }
 
+/** The full patient list, a page at a time, with the total so the screen can say "101 patients".
+    sort: visit (most recent visit first, default), name (A to Z), new (most recently added). */
+r.get('/browse', async c => {
+  const cid = me(c).clinic_id
+  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50)), offset = Math.max(0, Number(c.req.query('offset')) || 0)
+  const sort = c.req.query('sort') === 'name' ? 'name' : c.req.query('sort') === 'new' ? 'new' : 'visit'
+  const order = sort === 'name' ? sql()`lower(p.name), p.uhid` : sort === 'new' ? sql()`p.created_at desc, p.uhid desc` : sql()`v.last_visit desc nulls last, p.updated_at desc`
+  const [rows, [t]] = await sql().begin(db => Promise.all([
+    db`select p.*, v.last_visit, coalesce(v.visit_count, 0)::int as visit_count
+       from arx.patients p
+       left join lateral (select max(visit_date) as last_visit, count(*) as visit_count from arx.visits x where x.patient_id = p.id and x.status <> 'cancelled') v on true
+       where p.clinic_id = ${cid} order by ${order} limit ${limit} offset ${offset}`,
+    db`select count(*)::int as total from arx.patients where clinic_id = ${cid}`,
+  ]))
+  return c.json({ rows, total: t.total, offset, limit, sort })
+})
+
 r.get('/', async c => {
   const cid = me(c).clinic_id
   const q = (c.req.query('q') || '').trim()
@@ -63,7 +80,7 @@ export async function patientDetail(cid: string, id: string, light = false) {
   // Supabase pooler were the request that kept stalling (CONNECTION_DESTROYED / timeouts) on every deployment.
   const [[p], visits, rxs, docs, labs, bills, appts] = await sql().begin(db => Promise.all([
     db`select * from arx.patients where id = ${id} and clinic_id = ${cid}`,
-    light ? none : db`select id, visit_date, token, status, visit_type, complaint from arx.visits where patient_id = ${id} order by visit_date desc, token desc limit 100`,
+    light ? none : db`select id, visit_date, token, status, visit_type, complaint, source, vitals from arx.visits where patient_id = ${id} and clinic_id = ${cid} and status <> 'cancelled' order by visit_date desc, token desc limit 200`,
     db`select id, rx_date, status, data->>'diagnosis' as diagnosis, data->>'complaints' as complaints, data->'vitals' as vitals, jsonb_array_length(meds) as med_count, meds, legacy_id is not null as imported
        from arx.prescriptions where patient_id = ${id} and clinic_id = ${cid} order by rx_date desc, created_at desc limit ${light ? 40 : 200}`,
     light ? none : db`select id, kind, doc_date, extracted, file_id, created_at from arx.documents where patient_id = ${id} and clinic_id = ${cid} order by created_at desc`,

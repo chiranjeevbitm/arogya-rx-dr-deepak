@@ -388,62 +388,140 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .star.on { color: #C98A00 }
 .tag.valid { background: #E4F4EA; color: #14633A }
 
-/* ---------- OPD dashboard ---------- */
-.dash { display: flex; flex-direction: column; gap: 14px }
-.dash-h { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; justify-content: space-between }
-.dash-h h2 { margin: 0 }
-.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px }
-.kpi { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; animation: dash-rise .5s both }
-.kpi:nth-child(2) { animation-delay: .06s } .kpi:nth-child(3) { animation-delay: .12s } .kpi:nth-child(4) { animation-delay: .18s } .kpi:nth-child(5) { animation-delay: .24s }
-.kpi span { font-size: 12.5px; color: var(--muted); font-weight: 600 }
-.kpi b { font: 800 28px/1.1 var(--f-head); color: var(--ink-deep); font-variant-numeric: tabular-nums }
-.kpi em { font-style: normal; font-size: 12.5px; color: var(--muted) }
-.kpi em.up { color: var(--neem); font-weight: 600 } .kpi em.down { color: var(--sindoor); font-weight: 600 }
-.dgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
-.dcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px; min-width: 0; animation: dash-rise .55s both }
-.dcard.wide { grid-column: 1 / -1 }
-.dcard-h { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap }
-.dcard-h h3 { margin: 0; font: 700 15.5px/1.2 var(--f-head) }
-@keyframes dash-rise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
-.chart-wrap { position: relative }
-.chart { width: 100%; height: auto; display: block; overflow: visible }
-.chart .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4 }
-.chart .axis { fill: var(--muted); font: 600 11px var(--f-ui, system-ui) }
-.chart .axis.mlab.on { fill: var(--ink-deep); font-weight: 800 }
-.chart .val { fill: var(--text); font: 700 11px var(--f-ui, system-ui) }
-.chart .hit { fill: transparent; cursor: pointer }
-.chart .bar { cursor: pointer; outline: none }
-.chart .bar rect.b-new { fill: var(--ink) } .chart .bar rect.b-rep { fill: #8F9BEA } .chart .bar rect.b-one { fill: var(--ink) }
-.chart .bar { transition: opacity .2s, filter .2s } .chart:hover .bar:not(.hov) { opacity: .55 }
-.chart .bar.sel rect.b-new, .chart .bar.sel rect.b-one { fill: var(--neem) } .chart .bar.sel rect.b-rep { fill: #7BC49C }
-.chart .bar:focus-visible .hit { stroke: var(--ink); stroke-width: 2; rx: 6 }
-.chart .ln { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
-.chart .area { fill: var(--ink-soft) }
-.chart .dot { fill: var(--paper); stroke: var(--ink); stroke-width: 2 }
-.chart .cross { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3 }
-.tip { position: absolute; top: 0; transform: translate(-50%, -4px); background: var(--ink-deep); color: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; line-height: 1.4; pointer-events: none; white-space: nowrap; display: flex; flex-direction: column; box-shadow: 0 6px 18px rgba(14, 26, 110, .25); animation: dash-rise .15s both; z-index: 2 }
-.tip b { font-size: 12.5px }
-.legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 4px; flex-wrap: wrap }
-.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block } .legend i + i, .legend i:not(:first-child) { margin-left: 8px }
-.lg-new, .lg-one { background: var(--ink) } .lg-rep { background: #8F9BEA }
-.donut-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap }
-.donut { width: 150px; height: 150px; flex: none }
-.donut .d-bg { fill: none; stroke: var(--desk); stroke-width: 13 }
-.donut .d-num { font: 800 22px var(--f-head); fill: var(--ink-deep) } .donut .d-lab { font: 600 8.5px var(--f-ui, system-ui); fill: var(--muted) }
-.d-leg { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px }
-.d-leg li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 3px 6px; border-radius: 7px; transition: background .15s }
-.d-leg li.on { background: var(--desk) } .d-leg li i { width: 10px; height: 10px; border-radius: 50%; flex: none } .d-leg li b { margin-left: auto; font-variant-numeric: tabular-nums } .d-leg li small { color: var(--muted); width: 34px; text-align: right }
-.hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
-.hbars li { display: grid; grid-template-columns: minmax(70px, 38%) 1fr 28px; gap: 8px; align-items: center; font-size: 13.5px }
-.hb-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.hb-t { height: 12px; background: var(--desk); border-radius: 99px; overflow: hidden }
-.hb-f { display: block; height: 100%; border-radius: 99px; transition: width .8s cubic-bezier(.2,.9,.2,1) }
-.hbars b { text-align: right; font-variant-numeric: tabular-nums }
-.wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 150px }
-.wk-c { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; border-radius: 8px; padding: 2px; transition: background .15s }
-.wk-c.on { background: var(--desk) } .wk-c b { font-size: 12px; font-variant-numeric: tabular-nums } .wk-c small { color: var(--muted); font-size: 11.5px }
-.wk-bar { width: 100%; max-width: 34px; flex: 1; display: flex; align-items: flex-end; background: var(--desk); border-radius: 7px; overflow: hidden }
-.wk-bar > span { display: block; width: 100%; background: var(--ink); border-radius: 7px; transition: height .8s cubic-bezier(.2,.9,.2,1) }
-@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
-@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } .dgrid { grid-template-columns: 1fr } }
-@media (prefers-reduced-motion: reduce) { .kpi, .dcard, .tip { animation: none } .chart *, .hb-f, .wk-bar > span { transition: none !important } .chart .ln { stroke-dashoffset: 0 !important } }
+/* ---------- Dashboard (Fluent 2) ----------
+   Fluent 2 tokens, scoped to this page: neutral greys, 4 px spacing ramp, 4 px control and 8 px card corners,
+   shadow2 at rest / shadow8 on hover and for tooltips, Segoe UI type ramp (12/16, 14/20, 20/28, 28/36),
+   motion: decelerate-mid curve to enter, easy-ease for state changes, 150–500 ms. */
+.fl-dash {
+  --fl-bg1: #FFFFFF; --fl-bg2: #FAFAFA; --fl-bg3: #F5F5F5; --fl-bg4: #F0F0F0;
+  --fl-fg1: #242424; --fl-fg2: #424242; --fl-fg3: #616161; --fl-fg4: #707070;
+  --fl-stroke1: #D1D1D1; --fl-stroke2: #E0E0E0; --fl-stroke3: #EBEBEB;
+  --fl-brand: #1626B8; --fl-brand-h: #0E1A6E; --fl-brand-soft: #EBEDFB; --fl-brand-2: #9AA3EC;
+  --fl-ok: #0E700E; --fl-ok-bg: #F1FAF1; --fl-bad: #B10E1C; --fl-bad-bg: #FDF3F4; --fl-warn-bg: #FFF9F5;
+  --fl-r-ctl: 4px; --fl-r-card: 8px;
+  --fl-sh2: 0 0 2px rgba(0, 0, 0, .12), 0 1px 2px rgba(0, 0, 0, .14);
+  --fl-sh8: 0 0 2px rgba(0, 0, 0, .12), 0 4px 8px rgba(0, 0, 0, .14);
+  --fl-sh16: 0 0 2px rgba(0, 0, 0, .12), 0 8px 16px rgba(0, 0, 0, .14);
+  --fl-in: cubic-bezier(.1, .9, .2, 1); --fl-ease: cubic-bezier(.33, 0, .67, 1);
+  --fl-font: 'Segoe UI Variable Text', 'Segoe UI', var(--f-ui);
+  display: flex; flex-direction: column; gap: 16px; font-family: var(--fl-font); color: var(--fl-fg1); max-width: 1480px
+}
+.fl-dash h1, .fl-dash h3 { font-family: 'Segoe UI Variable Display', 'Segoe UI', var(--f-ui) }
+
+/* command bar */
+.fl-bar { display: flex; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap }
+.fl-bar h1 { font: 600 28px/36px 'Segoe UI Variable Display', 'Segoe UI', var(--f-ui); letter-spacing: 0 }
+.fl-bar p { font-size: 14px; line-height: 20px; color: var(--fl-fg3); margin-top: 2px }
+.fl-cmd { display: flex; align-items: center; gap: 4px; background: var(--fl-bg1); border-radius: var(--fl-r-card); padding: 4px; box-shadow: var(--fl-sh2) }
+.fl-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border: 1px solid transparent; border-radius: var(--fl-r-ctl); background: transparent; color: var(--fl-fg1); font: 600 14px/20px var(--fl-font); cursor: pointer; transition: background .1s var(--fl-ease) }
+.fl-btn:hover:not(:disabled) { background: var(--fl-bg3) } .fl-btn:active:not(:disabled) { background: var(--fl-stroke2) }
+.fl-btn:disabled { color: #BDBDBD; cursor: default }
+.fl-btn.icon { width: 32px; padding: 0; justify-content: center; font-size: 20px; font-weight: 400 }
+.fl-select { min-height: 32px; padding: 4px 30px 4px 10px; border: 1px solid var(--fl-stroke1); border-bottom-color: var(--fl-fg3); border-radius: var(--fl-r-ctl); background: var(--fl-bg1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23424242' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat right 10px center; appearance: none; font: 400 14px/20px var(--fl-font); color: var(--fl-fg1); cursor: pointer }
+.fl-select:hover { border-color: #C7C7C7; border-bottom-color: var(--fl-fg2) }
+.fl-select:focus-visible { outline: 0; border-bottom: 2px solid var(--fl-brand); border-radius: var(--fl-r-ctl) }
+.fl-dash :focus-visible { outline: 2px solid var(--fl-fg1); outline-offset: 1px }
+
+/* segmented control (Fluent TabList, small) */
+.fl-seg { display: inline-flex; gap: 2px }
+.fl-seg button { position: relative; border: 0; background: transparent; padding: 5px 10px; min-height: 32px; border-radius: var(--fl-r-ctl); font: 400 14px/20px var(--fl-font); color: var(--fl-fg2); cursor: pointer; transition: background .1s var(--fl-ease), color .1s }
+.fl-seg button:hover { background: var(--fl-bg3); color: var(--fl-fg1) }
+.fl-seg button::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 1px; height: 3px; border-radius: 3px; background: var(--fl-brand); transform: scaleX(0); transition: transform .25s var(--fl-in) }
+.fl-seg button[aria-pressed="true"] { color: var(--fl-fg1); font-weight: 600 } .fl-seg button[aria-pressed="true"]::after { transform: scaleX(1) }
+
+/* KPI cards */
+.fl-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px }
+.fl-kpi { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 12px; background: var(--fl-bg1); border-radius: var(--fl-r-card); box-shadow: var(--fl-sh2); color: inherit; text-decoration: none; min-width: 0; animation: fl-in .5s var(--fl-in) both; transition: box-shadow .15s var(--fl-ease), transform .15s var(--fl-ease) }
+.fl-kpi.link:hover { box-shadow: var(--fl-sh8); transform: translateY(-1px) } .fl-kpi.link:hover .fl-go { transform: translateX(2px); color: var(--fl-brand) }
+.fl-kpi-top { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.fl-kpi-l { font: 600 12px/16px var(--fl-font); color: var(--fl-fg3); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.fl-go { font-size: 18px; line-height: 1; color: var(--fl-fg4); transition: transform .15s var(--fl-ease), color .15s }
+.fl-ic { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--fl-brand-soft); color: var(--fl-brand) }
+.fl-kpi-v { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.fl-kpi-v b { font: 600 28px/36px 'Segoe UI Variable Display', 'Segoe UI', var(--f-ui); font-variant-numeric: tabular-nums; color: var(--fl-fg1) }
+.fl-kpi-f { display: flex; align-items: flex-end; gap: 8px; font-size: 12px; line-height: 16px; color: var(--fl-fg3); min-height: 32px }
+.fl-badge { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px; min-height: 20px; border-radius: 10000px; font: 600 12px/16px var(--fl-font); white-space: nowrap }
+.fl-badge.up { background: var(--fl-ok-bg); color: var(--fl-ok); box-shadow: inset 0 0 0 1px #9FD89F }
+.fl-badge.down { background: var(--fl-bad-bg); color: var(--fl-bad); box-shadow: inset 0 0 0 1px #EEACB2 }
+.fl-badge.flat { background: var(--fl-bg3); color: var(--fl-fg2); box-shadow: inset 0 0 0 1px var(--fl-stroke2); font-weight: 400 }
+.fl-spark { width: 92px; height: 32px; flex: none; overflow: visible }
+.fl-spark .a { fill: var(--fl-brand-soft); transition: opacity .5s .2s var(--fl-ease) }
+.fl-spark .l { fill: none; stroke: var(--fl-brand); stroke-width: 1.6; stroke-dasharray: 1; vector-effect: non-scaling-stroke; transition: stroke-dashoffset .8s var(--fl-in) }
+.fl-spark .p { fill: var(--fl-bg1); stroke: var(--fl-brand); stroke-width: 1.6; vector-effect: non-scaling-stroke; transition: opacity .3s .6s }
+
+/* 12-column card grid */
+.fl-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px }
+.fl-card { grid-column: span 4; min-width: 0; background: var(--fl-bg1); border-radius: var(--fl-r-card); box-shadow: var(--fl-sh2); padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: fl-in .5s var(--fl-in) both; transition: box-shadow .2s var(--fl-ease) }
+.fl-card:hover { box-shadow: var(--fl-sh8) }
+.fl-card.s4 { grid-column: span 4 } .fl-card.s6 { grid-column: span 6 } .fl-card.s8 { grid-column: span 8 } .fl-card.s12 { grid-column: 1 / -1 }
+.fl-card-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.fl-card-h h3 { font: 600 16px/22px 'Segoe UI Variable Display', 'Segoe UI', var(--f-ui) }
+.fl-card-h p { font-size: 12px; line-height: 16px; color: var(--fl-fg3); margin-top: 2px }
+@keyframes fl-in { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+
+/* skeleton (Fluent Skeleton, wave) */
+.fl-skel { border-radius: var(--fl-r-ctl); background: linear-gradient(90deg, var(--fl-bg4) 0, var(--fl-bg4) 40%, var(--fl-bg2) 50%, var(--fl-bg4) 60%, var(--fl-bg4) 100%) 0 0 / 300% 100%; animation: fl-wave 1.6s linear infinite }
+@keyframes fl-wave { from { background-position: 100% 0 } to { background-position: -50% 0 } }
+.fl-empty { color: var(--fl-fg3); font-size: 14px; padding: 16px 0 } .fl-empty.big { text-align: center; padding: 48px 16px } .fl-empty.big b { display: block; color: var(--fl-fg1); font-size: 16px; margin-bottom: 4px }
+.fl-msg { padding: 12px 16px; border-radius: var(--fl-r-card); font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap } .fl-msg.warn { background: var(--fl-warn-bg); box-shadow: inset 0 0 0 1px #FDCFB4 }
+
+/* charts */
+.fl-chart { position: relative }
+.fl-chart svg { width: 100%; height: auto; display: block; overflow: visible; touch-action: pan-y }
+.fl-chart .grid { stroke: var(--fl-stroke3); stroke-width: 1 } .fl-chart .base { stroke: var(--fl-stroke1); stroke-width: 1 }
+.fl-chart .axis { fill: var(--fl-fg3); font: 400 11px var(--fl-font) } .fl-chart .axis.on { fill: var(--fl-fg1); font-weight: 600 }
+.fl-chart .val { fill: var(--fl-fg2); font: 600 11px var(--fl-font); transition: opacity .3s var(--fl-ease) }
+.fl-chart .hit { fill: transparent; cursor: pointer; transition: fill .15s var(--fl-ease) }
+.fl-chart .col { cursor: pointer; outline: none; transition: opacity .2s var(--fl-ease) }
+.fl-chart .col.dim { opacity: .45 } .fl-chart .col.hov .hit { fill: var(--fl-bg3) }
+.fl-chart .col.sel .hit { fill: var(--fl-brand-soft) } .fl-chart .col:focus-visible .hit { stroke: var(--fl-fg1); stroke-width: 2 }
+.fl-chart .grow-y { transition: transform .5s var(--fl-in) }
+.fl-chart .s1 { fill: var(--fl-brand) } .fl-chart .s2 { fill: var(--fl-brand-2) }
+.fl-chart .ln { fill: none; stroke: var(--fl-brand); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; transition: stroke-dashoffset 1s var(--fl-in) }
+.fl-chart .fade { transition: opacity .6s .3s var(--fl-ease) }
+.fl-chart .dot { fill: var(--fl-bg1); stroke: var(--fl-brand); stroke-width: 2; transition: opacity .25s, r .1s var(--fl-ease) }
+.fl-chart .cross { stroke: var(--fl-fg3); stroke-width: 1; stroke-dasharray: 2 3 }
+.fl-tip { position: absolute; top: 0; transform: translate(-50%, -8px); background: var(--fl-bg1); color: var(--fl-fg1); border-radius: var(--fl-r-card); box-shadow: var(--fl-sh16); padding: 8px 12px; font-size: 12px; line-height: 16px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; white-space: nowrap; z-index: 2; animation: fl-pop .15s var(--fl-in) }
+.fl-tip b { font-size: 14px; line-height: 20px; font-weight: 600 } .fl-tip .muted { color: var(--fl-fg3) }
+@keyframes fl-pop { from { opacity: 0; transform: translate(-50%, -2px) } }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px } .sw.s1 { background: var(--fl-brand) } .sw.s2 { background: var(--fl-brand-2) }
+.fl-legend { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; line-height: 16px; color: var(--fl-fg2); margin-top: 8px } .fl-legend .muted { color: var(--fl-fg4) }
+
+.fl-donut { display: flex; align-items: center; gap: 16px; flex-wrap: wrap }
+.fl-donut svg { width: 140px; height: 140px; flex: none }
+.fl-donut .track { fill: none; stroke: var(--fl-bg4); stroke-width: 12 }
+.fl-donut .seg { cursor: pointer; transition: stroke-dasharray .7s var(--fl-in), stroke-width .15s var(--fl-ease), opacity .15s var(--fl-ease) }
+.fl-donut .num { font: 600 24px 'Segoe UI Variable Display', 'Segoe UI', var(--f-ui); fill: var(--fl-fg1) } .fl-donut .lab { font: 400 9px var(--fl-font); fill: var(--fl-fg3) }
+.fl-donut ul { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 2px }
+.fl-donut li { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; padding: 4px 6px; border-radius: var(--fl-r-ctl); cursor: default; transition: background .1s var(--fl-ease) }
+.fl-donut li.on { background: var(--fl-bg3) } .fl-donut li i { width: 10px; height: 10px; border-radius: 2px; flex: none } .fl-donut li b { font-weight: 600; font-variant-numeric: tabular-nums } .fl-donut li small { width: 36px; text-align: right; color: var(--fl-fg3); font-size: 12px }
+
+.fl-hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px }
+.fl-hbars li { display: grid; grid-template-columns: minmax(80px, 36%) minmax(0, 1fr) 30px 34px; gap: 8px; align-items: center; font-size: 14px; line-height: 20px }
+.fl-hbars .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fl-fg2) }
+.fl-hbars .t { height: 8px; background: var(--fl-bg4); border-radius: 10000px; overflow: hidden }
+.fl-hbars .f { display: block; height: 100%; border-radius: 10000px; transition: width .6s var(--fl-in) }
+.fl-hbars b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums } .fl-hbars small { text-align: right; color: var(--fl-fg3); font-size: 12px }
+
+.fl-wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 170px }
+.fl-wk .c { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; border-radius: var(--fl-r-ctl); padding: 4px 2px; transition: background .1s var(--fl-ease) }
+.fl-wk .c.on { background: var(--fl-bg3) } .fl-wk b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums } .fl-wk small { color: var(--fl-fg3); font-size: 12px }
+.fl-wk .bar { width: 100%; max-width: 28px; flex: 1; display: flex; align-items: flex-end; background: var(--fl-bg3); border-radius: var(--fl-r-ctl); overflow: hidden }
+.fl-wk .bar > span { display: block; width: 100%; background: var(--fl-brand-2); border-radius: var(--fl-r-ctl); transition: height .6s var(--fl-in) }
+.fl-wk .c.best .bar > span { background: var(--fl-brand) } .fl-wk .c.best small { color: var(--fl-fg1); font-weight: 600 }
+
+.fl-insights { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column }
+.fl-insights li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; font-size: 14px; line-height: 20px; color: var(--fl-fg2); animation: fl-in .4s var(--fl-in) both }
+.fl-insights li + li { border-top: 1px solid var(--fl-stroke3) } .fl-insights b { color: var(--fl-fg1); font-weight: 600 } .fl-insights .fl-ic { width: 26px; height: 26px }
+
+@media (max-width: 1280px) { .fl-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) } .fl-card.s4 { grid-column: span 6 } .fl-card.s8 { grid-column: 1 / -1 } .fl-card.s6 { grid-column: span 6 } }
+@media (max-width: 760px) { .fl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } .fl-grid { gap: 12px } .fl-card.s4, .fl-card.s6, .fl-card.s8 { grid-column: 1 / -1 } .fl-bar h1 { font-size: 24px; line-height: 32px } .fl-cmd { width: 100% } .fl-select { flex: 1 } .fl-spark { width: 70px } }
+@media (prefers-reduced-motion: reduce) { .fl-kpi, .fl-card, .fl-tip, .fl-insights li { animation: none } .fl-skel { animation: none } .fl-dash * { transition: none !important } .fl-chart .ln, .fl-spark .l { stroke-dashoffset: 0 !important } }
+
+/* Patients list: count, sort and skeleton rows */
+.plist-h { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 2px 2px 0; color: var(--muted) }
+.plist-h b { color: var(--text) } .plist-h .inp.sm { width: auto; min-height: 32px; padding: 3px 8px; font-size: 13px }
+.q-item.skel { cursor: default; pointer-events: none } .q-item.skel .q-tok { background: var(--desk-2) }
+.sk-line { display: block; height: 10px; width: 80%; border-radius: 5px; background: var(--desk-2); margin: 4px 0; animation: sk-pulse 1.2s ease-in-out infinite alternate } .sk-line.short { width: 50% }
+@keyframes sk-pulse { from { opacity: .55 } to { opacity: 1 } }
+.tl.visit-only b { font-weight: 600 } .tl.visit-only::before { border-color: var(--faint) } .tl.visit-only .d { color: var(--faint) }
