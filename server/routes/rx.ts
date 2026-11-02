@@ -28,7 +28,7 @@ async function load(c: any, id: string) {
 
 export async function rxBundle(clinicId: string, id: string) {
   const db = sql()
-  const [rx] = await db`select * from arx.prescriptions where id = ${id} and clinic_id = ${clinicId}`
+  const [rx] = await db`select *, updated_at::text as ver from arx.prescriptions where id = ${id} and clinic_id = ${clinicId}`
   if (!rx) throw new HttpError(404, 'Prescription not found.')
   // the other four lookups do not depend on each other: run them side by side (2 round trips instead of 5)
   const [[p], [v], [cl], [doc]] = await Promise.all([
@@ -67,13 +67,19 @@ r.post('/', requireAuth('doctor', 'admin'), async c => {
   return c.json({ rx_id: n.id })
 })
 
-/** Autosave (drafts only). */
+/** Autosave (drafts only), one query. `base` is the version this device last loaded or saved: if another device saved
+    in between, the save is refused with RX_CONFLICT so one doctor's edits never silently overwrite another's. */
 r.put('/:id', requireAuth('doctor', 'admin'), async c => {
-  const b = await body(c, RxIn)
-  const rx = await load(c, P(c, 'id'))
-  if (rx.status === 'final') throw new HttpError(409, 'This prescription is final. Reopen it to make changes.')
-  await sql()`update arx.prescriptions set data = ${sql().json(b.data)}, meds = ${sql().json(b.meds as any)}, updated_at = now() where id = ${rx.id}`
-  return c.json({ ok: true, saved_at: new Date().toISOString() })
+  const b = await body(c, RxIn.extend({ base: z.string().max(60).nullable().optional() }))
+  const id = P(c, 'id'), cid = me(c).clinic_id
+  const [u] = await sql()`update arx.prescriptions set data = ${sql().json(b.data)}, meds = ${sql().json(b.meds as any)}, updated_at = now()
+    where id = ${id} and clinic_id = ${cid} and status = 'draft' and (${b.base ?? null}::text is null or updated_at::text = ${b.base ?? null})
+    returning updated_at::text as ver`
+  if (u) return c.json({ ok: true, ver: u.ver, saved_at: new Date().toISOString() })
+  const [x] = await sql()`select status from arx.prescriptions where id = ${id} and clinic_id = ${cid}`
+  if (!x) throw new HttpError(404, 'Prescription not found.')
+  if (x.status === 'final') throw new HttpError(409, 'This prescription is final. Reopen it to make changes.', 'RX_FINAL')
+  throw new HttpError(409, 'This prescription was changed on another device.', 'RX_CONFLICT')
 })
 
 r.post('/:id/finalize', requireAuth('doctor', 'admin'), async c => {

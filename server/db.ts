@@ -10,16 +10,25 @@ export async function warmDb(force = false): Promise<void> {
   const idle = Date.now() - lastUse
   lastUse = Date.now()
   if (!_sql || (!force && idle < 3000)) return
+  const g = gen
   try {
     await Promise.race([_sql`select 1`, new Promise((_, rej) => setTimeout(() => rej(new Error('stale db connection')), 2500))])
-  } catch { resetDb() }
+  } catch { resetDb(g) }
 }
-/** Throw the connection pool away so the next query builds fresh connections. */
-export function resetDb() {
+/** Swap in a fresh connection pool. One server instance serves many requests at once, so:
+    - only the pool that actually failed is replaced (a request that started on an older pool cannot throw away the new one),
+    - at most one swap every 3 s (no reset storms when several requests fail together),
+    - the old pool gets 5 s to finish queries that are still running instead of having them cut off. */
+let gen = 0, lastReset = 0
+export const dbGen = () => gen
+export function resetDb(fromGen?: number) {
+  if (fromGen !== undefined && fromGen !== gen) return
+  if (Date.now() - lastReset < 3000) return
+  lastReset = Date.now(); gen++
   const old = _sql; _sql = null
-  old?.end({ timeout: 1 }).catch(() => {})
+  old?.end({ timeout: 5 }).catch(() => {})
 }
-const DEAD = new Set(['CONNECTION_DESTROYED', 'CONNECTION_CLOSED', 'CONNECTION_ENDED', 'CONNECTION_CONNECT_TIMEOUT', 'ECONNRESET', 'EPIPE'])
+const DEAD = new Set(['CONNECTION_DESTROYED', 'CONNECTION_CLOSED', 'CONNECTION_ENDED', 'CONNECTION_CONNECT_TIMEOUT', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', '57P01', '57P02', '57P03', '08000', '08003', '08006'])
 export const isDeadConnection = (e: any) => DEAD.has(e?.code) || DEAD.has(e?.errno)
 export const markDbUse = () => { lastUse = Date.now() }
 
@@ -45,7 +54,7 @@ export function sql(): postgres.Sql {
   const local = /localhost|127\.0\.0\.1|\/var\/run/.test(url)
   _sql = postgres(url, {
     prepare: false,                 // Supabase transaction pooler (port 6543)
-    max: local ? 10 : 3,
+    max: local ? 10 : 4,
     idle_timeout: 20,               // closing idle sockets every few seconds raced with new queries (CONNECTION_DESTROYED)
     max_lifetime: 300,
     connect_timeout: 10,

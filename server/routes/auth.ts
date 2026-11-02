@@ -32,6 +32,16 @@ r.post('/login', async c => {
 
 r.post('/logout', async c => { endSession(c); return c.json({ ok: true }) })
 
+/** Ends the session on every other phone or computer; this device stays signed in. */
+r.post('/logout-others', requireAuth(), async c => {
+  const u = me(c)
+  const [nu] = await sql()`update arx.users set session_version = session_version + 1 where id = ${u.id} returning id, session_version`
+  forgetUser(u.id)
+  await startSession(c, nu as any)
+  await audit(c, 'logout.others', 'user', u.id)
+  return c.json({ ok: true })
+})
+
 r.get('/me', async c => {
   const u = await currentUser(c)
   if (!u) return c.json({ user: null }, 401)

@@ -255,17 +255,21 @@ function SpeedCheck() {
 }
 
 function Security() {
-  const toast = useToast(), me = useMe()
+  const toast = useToast(), me = useMe(), dlg = useDialog()
   const [f, setF] = useState({ current: '', next: '', again: '' })
   const audit = useAsync(() => me.user.role !== 'reception' ? api<any[]>('/clinic/audit') : Promise.resolve([]), [])
   const change = async () => { if (f.next !== f.again) return toast('The new passwords do not match.', 'err'); try { await api('/auth/password', { body: { current: f.current, next: f.next } }); toast('Password changed. Other devices are logged out.', 'ok'); setF({ current: '', next: '', again: '' }) } catch (e: any) { toast(e.message, 'err') } }
-  const label: Record<string, string> = { login: 'Logged in', 'login.failed': 'Failed login', 'rx.finalize': 'Finalised prescription', 'rx.reopen': 'Reopened prescription', 'bill.create': 'Made bill', 'bill.void': 'Cancelled bill', 'patient.create': 'Added patient', 'patient.update': 'Edited patient', 'visit.create': 'Gave token', 'settings.update': 'Changed settings', 'staff.create': 'Added staff', 'staff.update': 'Changed staff', 'whatsapp.rx.api': 'Sent Rx (auto)', 'whatsapp.rx.link': 'Sent Rx (link)', 'ai.voice_rx': 'Voice draft', 'ai.scan': 'Scanned document', 'appointment.create': 'Booked appointment', 'appointment.arrive': 'Marked arrived', 'import.start': 'Started import', 'password.change': 'Changed password' }
+  const label: Record<string, string> = { login: 'Logged in', 'login.failed': 'Failed login', 'rx.finalize': 'Finalised prescription', 'rx.reopen': 'Reopened prescription', 'bill.create': 'Made bill', 'bill.void': 'Cancelled bill', 'patient.create': 'Added patient', 'patient.update': 'Edited patient', 'visit.create': 'Gave token', 'settings.update': 'Changed settings', 'staff.create': 'Added staff', 'staff.update': 'Changed staff', 'whatsapp.rx.api': 'Sent Rx (auto)', 'whatsapp.rx.link': 'Sent Rx (link)', 'ai.voice_rx': 'Voice draft', 'ai.scan': 'Scanned document', 'appointment.create': 'Booked appointment', 'appointment.arrive': 'Marked arrived', 'import.start': 'Started import', 'password.change': 'Changed password', 'logout.others': 'Logged out other devices' }
   return <div className="stack" style={{ maxWidth: 820 }}>
     <section className="sec"><div className="sec-h"><h3>Change my password</h3></div><div className="sec-b">
       <div className="grid3"><Field label="Current password"><input type="password" className="inp" autoComplete="current-password" value={f.current} onChange={e => setF({ ...f, current: e.target.value })} /></Field>
         <Field label="New password"><input type="password" className="inp" autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} /></Field>
         <Field label="New password again"><input type="password" className="inp" autoComplete="new-password" value={f.again} onChange={e => setF({ ...f, again: e.target.value })} /></Field></div>
       <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={f.next.length < 8} onClick={change}>Change password</button>
+    </div></section>
+    <section className="sec"><div className="sec-h"><h3>Devices</h3></div><div className="sec-b">
+      <p className="small muted" style={{ margin: 0 }}>You can stay signed in on the clinic computer, a laptop and your phone at the same time; each stays signed in for 7 days of use. If a device is lost or shared, sign it out from here.</p>
+      <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={async () => { if ((await dlg.ask('Log out all other devices?', { text: 'Every other phone and computer signed in with your number will need to log in again. This device stays signed in.', ok: 'Log out others', danger: true })) !== 'ok') return; try { await api('/auth/logout-others', { method: 'POST' }); toast('Other devices are logged out.', 'ok') } catch (e: any) { toast(e.message, 'err') } }}>Log out other devices</button>
     </div></section>
     <SpeedCheck />
     {me.user.role !== 'reception' && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2>Activity log</h2><span className="small muted">Every login, prescription, bill and setting change. It cannot be edited.</span></div>

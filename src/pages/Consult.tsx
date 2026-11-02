@@ -13,7 +13,7 @@ import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 import { safetyChecks, sigHi, vitalFlag, normFreq, FREQS, ROUTES, COMORBIDITIES, ADDICTIONS, EXAM_SIGNS, SYSTEMIC, COMMON_INVESTIGATIONS, ADVICE_PRESETS, parchiValidity, PARCHI_VALID_DAYS, type Med, type Vitals } from '../../shared/rx'
 
-type Bundle = { history?: Hist; rx: { id: string; status: string; rx_date: string; data: RxData; meds: Med[]; patient_id: string; visit_id: string | null; pdf_file_id: string | null }; patient: any; visit: any }
+type Bundle = { history?: Hist; rx: { ver?: string; id: string; status: string; rx_date: string; data: RxData; meds: Med[]; patient_id: string; visit_id: string | null; pdf_file_id: string | null }; patient: any; visit: any }
 type Template = { id: string; name: string; data: { diagnosis: string; meds: Med[]; investigations: string[]; advice: string[]; follow_up_days?: number | null } }
 type Hist = { prescriptions: { id: string; rx_date: string; diagnosis: string; complaints: string; meds: Med[]; status: string; vitals: Vitals }[]; labs: { test: string; value_num: number; result_date: string; unit: string }[]; bills: any[] }
 
@@ -31,13 +31,13 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const [wa, setWa] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [busy, setBusy] = useState(false)
   const [ja, setJa] = useState<Record<string, { name: string; price: number } | null>>({})
   const [now, setNow] = useState(Date.now())
-  const first = useRef(true), page = useRef<HTMLDivElement>(null)
+  const first = useRef(true), page = useRef<HTMLDivElement>(null), ver = useRef<string | null>(null), conflictOpen = useRef(false), inflight = useRef<Promise<void>>(Promise.resolve())   // version last loaded or saved on this device
   const out = useRxOutput(rxId, page, !!b?.rx.pdf_file_id)
 
   const load = useCallback(async () => {
     try {
       const x = await api<Bundle>(`/rx/${rxId}?history=1`)   // prescription and patient history in one request
-      setB(x); setData(x.rx.data || {}); setMeds(x.rx.meds || []); first.current = true; setSaved('saved')
+      setB(x); setData(x.rx.data || {}); setMeds(x.rx.meds || []); ver.current = x.rx.ver || null; first.current = true; setSaved('saved')
       if (x.history) setHist(x.history)
     } catch (e: any) { setErr(e.message) }
   }, [rxId])
@@ -51,11 +51,22 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     if (!b || final) return
     if (first.current) { first.current = false; return }
     setSaved('dirty')
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => { inflight.current = inflight.current.then(async () => {   // one save at a time, so a device never conflicts with itself
       if (finalizing.current) return
       setSaved('saving')
-      try { await api(`/rx/${rxId}`, { method: 'PUT', body: { data, meds } }); setSaved('saved') } catch (e: any) { setSaved('dirty'); if (e instanceof ApiError && e.status !== 0 && e.status !== 409) toast(e.message, 'err') }
-    }, 900)
+      try { const r = await api<{ ver: string }>(`/rx/${rxId}`, { method: 'PUT', body: { data, meds, base: ver.current } }); ver.current = r.ver; setSaved('saved') } catch (e: any) {
+        setSaved('dirty')
+        if (e instanceof ApiError && e.code === 'RX_CONFLICT') {
+          if (conflictOpen.current) return
+          conflictOpen.current = true
+          // the same prescription was edited on another device (e.g. the doctor's phone): let the doctor choose, never overwrite silently
+          const pick = await dlg.ask('Changed on another device', { text: 'This prescription was saved from another device after you opened it. Load that version, or keep what is on this screen and overwrite it.', ok: 'Load latest', alt: 'Keep mine' })
+          if (pick === 'ok') load()
+          else if (pick === 'alt') { ver.current = null; setData(d => ({ ...d })) }   // next autosave writes without the version check
+          conflictOpen.current = false
+        } else if (e instanceof ApiError && e.status !== 0 && e.status !== 409) toast(e.message, 'err')
+      }
+    }) }, 900)
     return () => clearTimeout(t)
   }, [data, meds]) // eslint-disable-line
   useEffect(() => { const f = (e: BeforeUnloadEvent) => { if (saved !== 'saved') e.preventDefault() }; window.addEventListener('beforeunload', f); return () => window.removeEventListener('beforeunload', f) }, [saved])

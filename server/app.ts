@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { ensureSchema, HttpError, warmDb, markDbUse, resetDb, isDeadConnection, sql } from './db.js'
+import { ensureSchema, HttpError, warmDb, markDbUse, resetDb, isDeadConnection, sql, dbGen } from './db.js'
 import type { AuthUser } from './lib/auth.js'
 import auth from './routes/auth.js'
 import setup from './routes/setup.js'
@@ -19,7 +19,7 @@ import ai from './routes/ai.js'
 import importer from './routes/import.js'
 import ask from './routes/ask.js'
 
-export type Env = { Variables: { user: AuthUser } }
+export type Env = { Variables: { user: AuthUser; dbGen: number } }
 export const me = (c: Context) => c.get('user') as AuthUser
 export const P = (c: Context, k: string): string => {
   const v = c.req.param(k)
@@ -48,16 +48,25 @@ app.use('*', async (c, next) => {
     if (origin && host && new URL(origin).host !== host) throw new HttpError(403, 'Cross-site request blocked.')
   }
   const t0 = performance.now()
-  let warm = 0
-  if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema(); warm = performance.now() - t0 }
-  try { await next() } finally {
+  c.set('dbGen', dbGen())
+  // a query stuck on a dead socket would otherwise hang until the 60 s platform limit; give up early so the request can be retried on a fresh pool
+  const budget = /^\/api\/(ai|ask|import|setup|messages\/reminders|cron)\b/.test(c.req.path) ? 58000 : 12000
+  let timer: ReturnType<typeof setTimeout> | undefined, warm = 0
+  const work = (async () => {
+    if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema(); warm = performance.now() - t0 }
+    await next()
+  })()
+  work.catch(() => {})   // after a timeout the late failure is already answered; do not let it surface as an unhandled rejection
+  try {
+    await Promise.race([work, new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('request timed out waiting for the database'), { code: 'CONNECTION_CONNECT_TIMEOUT' })), budget) })])
+  } finally {
+    clearTimeout(timer)
     markDbUse()
     // lets the browser (and the Speed check in Settings) tell server time apart from network time
     c.header('Server-Timing', `db-ready;dur=${warm.toFixed(0)}, total;dur=${(performance.now() - t0).toFixed(0)}`)
   }
 })
 
-// /api/health?db=1 is what the keep-warm ping calls: it also wakes the database connection and the free Supabase project
 app.get('/health', async c => {
   if (c.req.query('db') === '1') { await warmDb(true); await ensureSchema(); await sql()`select 1` }
   return c.json({ ok: true, at: new Date().toISOString() })
@@ -85,7 +94,11 @@ app.onError((e, c) => {
   const pg = e as any
   if (pg?.code === '23505') return c.json({ error: 'This already exists.' }, 409)
   if (pg?.code === '22P02') return c.json({ error: 'Invalid id.' }, 400)
-  if (isDeadConnection(pg)) { resetDb(); console.error('[api] dead db connection, pool reset', c.req.method, c.req.path); return c.json({ error: 'The connection dropped. Trying again…', code: 'DB_RETRY' }, 503) }
+  if (isDeadConnection(pg)) {
+    resetDb(c.get('dbGen'))
+    console.error('[api] dead db connection', pg?.code || pg?.errno, c.req.method, c.req.path)
+    return c.json({ error: 'The server lost its database connection. Please try again.', code: 'DB_RETRY' }, 503, { 'X-Db-Retry': '1' })
+  }
   console.error('[api]', c.req.method, c.req.path, e)
   return c.json({ error: 'Something went wrong on the server. Please try again.' }, 500)
 })

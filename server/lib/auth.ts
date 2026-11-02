@@ -32,7 +32,9 @@ export type Role = 'doctor' | 'reception' | 'admin'
 export type AuthUser = { id: string; clinic_id: string; name: string; role: Role; phone: string }
 
 const COOKIE = 'arx_session'
-const TTL_HOURS = 14
+// Doctors move between the clinic PC, a laptop and a phone: a session stays signed in for 7 days and is renewed
+// every 12 h of use, so a device used daily never asks to log in again. "Log out other devices" ends all of them at once.
+const TTL_HOURS = 24 * 7, RENEW_AFTER_S = 12 * 3600
 
 export async function startSession(c: Context, u: { id: string; session_version: number }) {
   const token = await new SignJWT({ sv: u.session_version }).setProtectedHeader({ alg: 'HS256' })
@@ -63,7 +65,7 @@ export async function currentUser(c: Context): Promise<AuthUser | null> {
     const u = await userRow(payload.sub as string)
     if (!u || !u.active || u.session_version !== payload.sv) return null
     const age = Date.now() / 1000 - (payload.iat || 0)
-    if (age > (TTL_HOURS * 3600) / 2) await startSession(c, u as any)
+    if (age > RENEW_AFTER_S) await startSession(c, u as any)
     return { id: u.id, clinic_id: u.clinic_id, name: u.name, role: u.role, phone: u.phone }
   } catch { return null }
 }

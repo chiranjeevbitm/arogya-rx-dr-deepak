@@ -12,7 +12,7 @@ function logTiming(path: string, t0: number, r: Response) {
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number; _retried?: boolean } = {}): Promise<T> {
   const method = opts.method || (opts.body ? 'POST' : 'GET')
   // AI reading and imports legitimately take 10-50 s; everything else is cut at 15 s
-  const limit = opts.timeoutMs ?? (/^\/(ai|ask|import|setup)\b/.test(path) ? 70000 : 15000)
+  const limit = opts.timeoutMs ?? (/^\/(ai|ask|import|setup)\b/.test(path) ? 70000 : 25000)
   let r: Response | undefined, lastErr: any
   const t0 = performance.now()
   // a request that hangs (a sleeping server or a dropped connection) is cut at 15 s (see limit); reads are retried once on a fresh connection
