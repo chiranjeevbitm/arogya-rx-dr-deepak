@@ -5,7 +5,8 @@ import { body, me, P, type Env } from '../app.js'
 import { requireAuth } from '../lib/auth.js'
 import { audit } from '../lib/audit.js'
 import { rateLimit } from '../lib/ratelimit.js'
-import { aiJson, aiConfigured, aiModel, transcribe } from '../lib/ai.js'
+import { aiJson, aiConfigured, aiModel, aiProviders, aiCheck, transcribe } from '../lib/ai.js'
+import { basicParse, trigramSim } from '../../shared/basicRx.js'
 import { putFile } from '../lib/storage.js'
 import { detectForm, defaultDose, defaultRoute, normFreq, istToday } from '../../shared/rx.js'
 
@@ -31,7 +32,44 @@ Rules:
 - BP like "138 by 86" becomes "138/86". Temperature in °F. Sugar/GRBS in mg/dL.
 - follow_up_days from phrases like "5 din baad dikhayein".`
 
-r.get('/status', c => c.json({ configured: aiConfigured(), model: aiModel() }))
+r.get('/status', c => c.json({ configured: aiConfigured(), model: aiModel(), providers: aiProviders() }))
+
+/** Settings → AI: a live check of each provider and the last few AI errors (no patient data). */
+r.get('/check', requireAuth('doctor', 'admin'), async c => {
+  const u = me(c)
+  await rateLimit(`aicheck:${u.id}`, 20, 3600)
+  const [providers, recent] = await Promise.all([aiCheck(), sql()`select kind, provider, model, ok, error, ms, created_at from arx.ai_usage where clinic_id = ${u.clinic_id} order by created_at desc limit 12`.catch(() => [])])
+  return c.json({ providers, recent })
+})
+
+/** No AI answered: read the dictation with fixed rules and the medicine list, so the doctor still gets a draft. */
+async function basicDraft(clinicId: string, transcript: string) {
+  const b = basicParse(transcript)
+  const meds: any[] = [], complaints: string[] = [...b.other]
+  for (const ph of b.phrases) {
+    let candidates = ph.name.length >= 3 ? await ground(clinicId, ph.name, ph.strength) : []
+    // once a medicine word is recognised, also take other products with that word (and the spoken strength), shortest names first
+    const w0 = (candidates[0]?.name || '').toLowerCase().match(/^[a-z]{4,}/)?.[0]
+    if (w0) {
+      const num = ph.strength.match(/\d+(\.\d+)?/)?.[0] || ''
+      const more = await sql()`select name, kind, price::float as price from arx.medicines where (clinic_id is null or clinic_id = ${clinicId}) and lower(name) like ${w0 + '%'}
+        and (${num} = '' or name ~ ${'(^|[^0-9.])' + num.replace('.', '\\.') + '([^0-9]|$)'}) order by length(name), name limit 6`
+      candidates = [...candidates, ...more.map(x => ({ name: x.name, kind: x.kind, price: x.price }))].filter((x, i, a) => a.findIndex(y => y.name.toLowerCase() === x.name.toLowerCase()) === i).slice(0, 6)
+    }
+    // no form was spoken: tablets and capsules before injections, drops and creams
+    // and single medicines before combinations, unless a combination was spoken
+    const odd = (x: string) => (!ph.form && /inj|vial|ampoule|drop|cream|ointment|gel/i.test(x) ? 2 : 0) + (!/\+| and /i.test(ph.text) && /\+|\band\b/i.test(x) ? 1 : 0)
+    candidates = [...candidates].sort((a, b) => odd(a.name) - odd(b.name))
+    const words = ph.name.toLowerCase().split(/\s+/).filter(w => w.length >= 3)
+    const first = (candidates[0]?.name || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)[0] || ''
+    const match = first.length >= 3 && words.some(w => first.startsWith(w.slice(0, 4)) || w.startsWith(first.slice(0, 4)) || trigramSim(w, first) >= 0.35)
+    if (!match && !ph.freq) { complaints.push(ph.text); continue }
+    meds.push({ name: ph.name || ph.text, strength: ph.strength, form: ph.form, dose: '', freq: ph.freq, timing: ph.timing, days: ph.days, duration_text: '', instructions: '', _candidates: match ? candidates : [] })
+  }
+  const at = (x: string) => { const i = transcript.indexOf(x); return i < 0 ? 1e9 : i }
+  complaints.sort((a, b) => at(a) - at(b))
+  return { complaints: complaints.join('; '), diagnosis: '', exam_notes: '', vitals: b.vitals, meds, investigations: b.investigations, advice: b.advice, follow_up_days: b.follow_up_days }
+}
 
 /** Ground a spoken medicine name against the catalogue and the doctor's own favourites. */
 async function ground(clinicId: string, name: string, strength: string) {
@@ -65,22 +103,29 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
     const [p] = await sql()`select age_years, sex, allergies, conditions from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
     if (p) ctx = `\nPatient: ${p.age_years ?? '?'}y ${p.sex ?? ''}. Known conditions: ${(p.conditions || []).join(', ') || 'none'}. Allergies: ${(p.allergies || []).join(', ') || 'none'}.`
   }
-  const out = await aiJson<any>({ kind: 'voice_rx', clinicId: u.clinic_id, userId: u.id, system: VOICE_SYSTEM, schemaName: 'rx_draft', schema: VOICE_SCHEMA, effort: 'low', maxTokens: 6000,
-    parts: [{ type: 'input_text', text: `Dictation:\n"""${b.transcript}"""${ctx}` }] })
+  let out: any, basic: string | null = null
+  try {
+    if (!aiConfigured()) throw new HttpError(503, 'No AI key is set')
+    out = await aiJson<any>({ kind: 'voice_rx', clinicId: u.clinic_id, userId: u.id, system: VOICE_SYSTEM, schemaName: 'rx_draft', schema: VOICE_SCHEMA, effort: 'low', maxTokens: 6000,
+      parts: [{ type: 'input_text', text: `Dictation:\n"""${b.transcript}"""${ctx}` }] })
+  } catch (e: any) {
+    basic = String(e?.message || e)
+    out = await basicDraft(u.clinic_id, b.transcript)
+  }
   const meds = []
   for (const m of out.meds || []) {
-    const candidates = await ground(u.clinic_id, m.name, m.strength)
+    const candidates = m._candidates ?? await ground(u.clinic_id, m.name, m.strength)
     const form = m.form || detectForm(candidates[0]?.name || m.name)
     meds.push({ spoken: [m.name, m.strength].filter(Boolean).join(' '), candidates, med: { name: candidates[0]?.name || [m.name, m.strength].filter(Boolean).join(' '), kind: (candidates[0]?.kind as any) || 'custom', form, dose: sane(m.dose, form, m.strength), route: defaultRoute(form), freq: normFreq(m.freq), timing: m.timing || '', days: m.days, duration: m.duration_text || '', instructions: m.instructions || '' } })
   }
-  await audit(c, 'ai.voice_rx', 'patient', b.patient_id ?? null, { meds: meds.length })
-  return c.json({ ...out, meds })
+  await audit(c, 'ai.voice_rx', 'patient', b.patient_id ?? null, { meds: meds.length, basic: !!basic })
+  return c.json({ ...out, meds, basic: basic ? `Basic draft without AI (${basic.replace(/\.$/, '')}). Check every line.` : null })
 })
 
 r.post('/transcribe', async c => {
-  const b = await body(c, z.object({ audio_base64: z.string().max(14_000_000), mime: z.string().max(60) }))
+  const b = await body(c, z.object({ audio_base64: z.string().max(14_000_000), mime: z.string().max(60), lang: z.enum(['hi', 'en']).optional() }))
   await rateLimit(`ai:${me(c).id}`, 120, 3600)
-  return c.json({ text: await transcribe(Buffer.from(b.audio_base64, 'base64'), b.mime) })
+  return c.json({ text: await transcribe(Buffer.from(b.audio_base64, 'base64'), b.mime, b.lang || 'hi') })
 })
 
 const SCAN_SCHEMA = S({

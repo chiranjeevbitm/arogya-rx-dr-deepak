@@ -35,6 +35,10 @@ r = await call('POST', '/api/ai/patient-intake', {}, 'doctor'); ok(r.status === 
 r = await call('POST', '/api/ai/patient-intake', { image: 'data:text/plain;base64,AAAA' }, 'doctor'); ok(r.status === 400, 'patient intake rejects a non-image', r)
 r = await call('POST', '/api/ai/patient-intake', { pdf: 'data:text/plain;base64,AAAA' }, 'doctor'); ok(r.status === 400, 'patient intake rejects a non-PDF in the pdf field', r)
 r = await call('POST', '/api/ai/transcribe', {}, 'reception'); ok(r.status === 400, 'reception can reach transcribe (bad body gives 400, not 403)', r)
+if (!process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY) {
+  r = await call('POST', '/api/ai/voice-rx', { transcript: 'Teen din se bukhar. BP 120 by 80. Dolo 650 teen baar khane ke baad paanch din. CBC karwa lijiye. Teen din baad dikhayein.' }, 'doctor')
+  ok(r.status === 200 && !!r.j.basic && r.j.vitals?.bp === '120/80' && r.j.follow_up_days === 3 && r.j.meds?.[0]?.med?.freq === '1-1-1' && r.j.meds?.[0]?.med?.days === 5 && /dolo/i.test(r.j.meds?.[0]?.med?.name) && r.j.investigations?.[0] === 'CBC', 'voice without AI gives a basic draft', r.j)
+}
 r = await call('POST', '/api/ai/patient-intake', { transcript: 'Ramesh Kumar 45 saal' }, 'reception'); ok(r.status !== 403 && r.status !== 401, 'reception may use patient intake (not blocked by role)', r)
 r = await call('GET', '/api/medicines/ja?name=' + encodeURIComponent('Telmisartan 40 mg Tablet'), null, 'doctor'); ok(r.j && /telmisartan/i.test(r.j.name), 'Jan Aushadhi alternative found', r.j)
 

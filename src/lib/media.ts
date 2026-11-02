@@ -24,13 +24,27 @@ export function micMessage(e: any): string {
 /** Live dictation with the browser's speech engine (Chrome, Edge, Android). Returns null if it cannot start.
     onEnd(err, fallback): fallback=true means live speech is not working here (no network to the speech service,
     unsupported, or it keeps restarting) and the caller should record audio instead. */
+/** Whether this browser's own live speech-to-text is usable: Chrome, Edge and Android Chrome yes; Firefox has none;
+    Brave has the API but it silently returns nothing; Safari's needs Siri dictation and often stops at once. */
+export function liveSpeech(): { ok: boolean; why: string } {
+  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  const ua = navigator.userAgent
+  if ((navigator as any).brave) return { ok: false, why: 'Brave blocks live speech; your voice is recorded and turned into text on the server instead.' }
+  if (!SR) return { ok: false, why: 'This browser has no live speech; your voice is recorded and turned into text on the server instead.' }
+  if (/iPhone|iPad|Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|CriOS|Edg/.test(ua)) return { ok: false, why: 'Safari live speech is unreliable; your voice is recorded and turned into text on the server instead.' }
+  if (!navigator.onLine) return { ok: false, why: 'Offline: live speech needs the internet.' }
+  return { ok: true, why: /Edg\//.test(ua) ? 'Edge live speech (Microsoft).' : 'Chrome live speech (Google).' }
+}
+
 export function startDictation(lang: string, onText: (finalText: string, interim: string) => void, onEnd: (err?: string, fallback?: boolean) => void): Rec | null {
   const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  if (!SR) return null
+  if (!SR || !liveSpeech().ok) return null
   let r: any
   try { r = new SR() } catch { return null }
   r.lang = lang; r.continuous = true; r.interimResults = true
-  let finalText = '', stopped = false, gotAny = false, quick = 0, startedAt = 0
+  let finalText = '', stopped = false, gotAny = false, quick = 0, startedAt = 0, done = false
+  let watchdog: ReturnType<typeof setTimeout> | undefined
+  const end = (err?: string, fallback?: boolean) => { if (done) return; done = true; clearTimeout(watchdog); onEnd(err, fallback) }
   r.onresult = (e: any) => {
     let interim = ''
     gotAny = true; quick = 0
@@ -43,19 +57,21 @@ export function startDictation(lang: string, onText: (finalText: string, interim
   r.onerror = (e: any) => {
     if (e.error === 'no-speech' || e.error === 'aborted') return
     stopped = true
-    if (e.error === 'not-allowed') return onEnd('Microphone is blocked. Tap the lock icon next to the address, set Microphone to Allow, then try again.')
+    if (e.error === 'not-allowed') return end('Microphone is blocked. Tap the lock icon next to the address, set Microphone to Allow, then try again.')
     // network / service-not-allowed / language-not-supported / audio-capture: live speech is unavailable here, record instead
-    onEnd(undefined, true)
+    end(undefined, true)
   }
   r.onend = () => {
-    if (stopped) return onEnd()
+    if (stopped) return end()
     // some phones end the session straight away without any speech; after three quick ends in a row, record instead
     if (Date.now() - startedAt < 1200 && !gotAny) quick++
-    if (quick >= 3) { stopped = true; return onEnd(undefined, true) }
-    try { startedAt = Date.now(); r.start() } catch { stopped = true; onEnd(undefined, true) }
+    if (quick >= 3) { stopped = true; return end(undefined, true) }
+    try { startedAt = Date.now(); r.start() } catch { stopped = true; end(undefined, true) }
   }
-  try { startedAt = Date.now(); r.start() } catch { return null }
-  return { stop: () => { stopped = true; try { r.stop() } catch { /* already stopped */ } } }
+  // live speech that never returns any text (blocked speech service, some company networks): after 9 s, record instead
+  watchdog = setTimeout(() => { if (!gotAny && !stopped) { stopped = true; try { r.abort() } catch { /* ignore */ } end(undefined, true) } }, 9000)
+  try { startedAt = Date.now(); r.start() } catch { clearTimeout(watchdog); return null }
+  return { stop: () => { stopped = true; clearTimeout(watchdog); try { r.stop() } catch { /* already stopped */ } } }
 }
 
 /** Record audio for server-side transcription (works in any browser with a microphone, including iPhone Safari). */

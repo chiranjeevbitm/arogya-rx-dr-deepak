@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { compressImage } from '../lib/media'
+import { compressImage, liveSpeech } from '../lib/media'
 import { useDictation } from '../lib/useDictation'
 import { istToday } from '../lib/format'
 import { Modal, useToast, useElapsed } from './ui'
@@ -10,7 +10,7 @@ import { sigEn, type Med } from '../../shared/rx'
 export type VoiceDraft = {
   complaints: string; diagnosis: string; exam_notes: string; vitals: Record<string, string>
   meds: { spoken: string; candidates: { name: string; kind: string; price?: number; favourite?: boolean }[]; med: Med }[]
-  investigations: string[]; advice: string[]; follow_up_days: number | null
+  investigations: string[]; advice: string[]; follow_up_days: number | null; basic?: string | null
 }
 
 /** Dictate → transcript → AI draft → doctor ticks what to keep. */
@@ -41,6 +41,7 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
       </div>
       <textarea className="inp" rows={7} value={text + (interim ? (text ? ' ' : '') + interim : '')} onChange={e => setText(e.target.value)} placeholder="For example: Teen din se bukhar aur gale mein dard. BP 120 by 80, temperature 101. Viral fever. Dolo 650 teen baar khane ke baad teen din, Levocetirizine raat ko paanch din. CBC. Teen din baad dikhayein." />
       {rec === 'audio' && <div className="alert info small">Recording. Speak now, then press Stop. The audio is turned into text on the server (live text is not available here).</div>}
+      {rec === 'idle' && !text && <p className="tiny muted">{liveSpeech().why}</p>}
     </div>
   </Modal>
 
@@ -52,6 +53,7 @@ export function VoiceDialog({ patientId, onClose, onApply }: { patientId: string
     <button className="btn primary" onClick={() => onApply({ ...draft, keep, medChoice: medSel.filter(Boolean) as Med[] })}>Add to prescription</button>
   </>}>
     <div className="stack">
+      {draft.basic && <div className="alert warn small">{draft.basic}</div>}
       {draft.complaints && <K k="complaints" label="Complaints">{draft.complaints}</K>}
       {Object.values(draft.vitals).some(Boolean) && <K k="vitals" label="Vitals">{Object.entries(draft.vitals).filter(([, v]) => v).map(([k, v]) => `${k.toUpperCase()} ${v}`).join(', ')}</K>}
       {draft.diagnosis && <K k="diagnosis" label="Diagnosis">{draft.diagnosis}</K>}

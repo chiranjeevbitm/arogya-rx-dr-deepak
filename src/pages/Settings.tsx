@@ -6,6 +6,7 @@ import { compressImage } from '../lib/media'
 import { fmtDate, timeAgo, istToday, d10 } from '../lib/format'
 import { Modal, Spinner, useAsync, useToast, useDialog, Field, TagInput } from '../components/ui'
 import Icon from '../components/Icon'
+import { liveSpeech } from '../lib/media'
 import { ParchiPreview } from '../components/Parchi'
 import MedSearch from '../components/MedSearch'
 import { mergeSettings, type ClinicSettings } from '../../shared/settings'
@@ -197,8 +198,10 @@ function Messages() {
           : <><span className="tag amber">Link mode</span><p className="small muted">The Send button opens WhatsApp with the Hindi message and the PDF link already written; staff press send. To send automatically, add AiSensy (see the setup guide) and set AISENSY_API_KEY in Vercel.</p></>}
       </section>
       <section className="card stack tight"><h3>AI (voice and photo)</h3>
-        {me.features.ai ? <><span className="tag green">On: OpenAI {me.features.ai_model}</span><p className="small muted">Voice uses the browser's speech recognition, then {me.features.ai_model} turns it into a draft. Photos of old prescriptions and reports are read by the same model. Every result is a draft for the doctor to check.</p></>
-          : <><span className="tag amber">Off</span><p className="small muted">Add OPENAI_API_KEY in Vercel to turn on voice-to-prescription and photo intake.</p></>}
+        {me.features.ai ? <span className="tag green">On: {me.features.ai_providers || `OpenAI ${me.features.ai_model}`}</span> : <span className="tag amber">No AI key</span>}
+        <p className="small muted">Voice: Chrome and Edge write your words live for free; other browsers record and the server turns the audio into text (Groq Whisper, free, or OpenAI). The words then become a draft with AI, or with basic rules if no AI answers. Photos of old prescriptions and reports need OpenAI. Every result is a draft for the doctor to check.</p>
+        {!/Groq/.test(me.features.ai_providers || '') && <p className="small muted">Free option: make a Groq account at console.groq.com, create an API key, and add it in Vercel as GROQ_API_KEY.</p>}
+        <AiCheck />
         <p className="small muted">Files are stored in {me.features.storage === 'supabase' ? 'Supabase Storage (Mumbai)' : 'the database'}.</p>
       </section>
     </div>
@@ -285,5 +288,21 @@ function Security() {
       <div className="tbl-wrap" style={{ maxHeight: 460, overflow: 'auto' }}><table className="t"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>
         {(audit.data || []).map(a => <tr key={a.id}><td className="small nowrap">{fmtDate(d10(a.at))} {new Date(a.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td><td>{a.user_name || a.meta?.phone || '—'}</td><td>{label[a.action] || a.action}</td></tr>)}
       </tbody></table></div></section>}
+  </div>
+}
+
+/** Live check of each AI provider, this browser's speech and the last AI errors. */
+function AiCheck() {
+  const [res, setRes] = useState<{ providers: { provider: string; ok: boolean; ms: number; note: string }[]; recent: any[] } | null>(null), [busy, setBusy] = useState(false), toast = useToast()
+  const run = async () => { setBusy(true); try { setRes(await api('/ai/check')) } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) } }
+  const ls = liveSpeech()
+  return <div className="stack tight">
+    <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={run} disabled={busy}>{busy ? 'Checking…' : 'Check AI and voice'}</button>
+    {res && <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+      <li>This browser: {ls.ok ? <span className="tag green">live speech</span> : <span className="tag amber">records audio</span>} {ls.why}</li>
+      {res.providers.length === 0 && <li><span className="tag red">No AI key</span> Voice still makes a basic draft; add GROQ_API_KEY (free) for AI drafts.</li>}
+      {res.providers.map(p => <li key={p.provider}>{p.provider}: {p.ok ? <span className="tag green">working, {p.ms} ms</span> : <span className="tag red">{p.note}</span>}</li>)}
+    </ul>}
+    {res && res.recent.some(r => !r.ok) && <details className="small"><summary>Recent AI errors</summary><ul style={{ margin: 0, paddingLeft: 18 }}>{res.recent.filter(r => !r.ok).slice(0, 6).map((r, i) => <li key={i}>{timeAgo(r.created_at)} · {r.kind} · {r.provider}: {r.error}</li>)}</ul></details>}
   </div>
 }

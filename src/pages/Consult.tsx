@@ -152,7 +152,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
       {final && <div className="alert ok"><b>Final.</b><span className="grow">Print it, send it on WhatsApp, or call the next patient.</span><button className="btn sm" onClick={reopen}>Reopen to edit</button></div>}
 
       {!ro && <div className="tools">
-        <button className="tool" onClick={() => setVoice(true)} disabled={!me.features.ai}><span className="ic"><Icon n="mic" /></span><span><b>Speak the consult</b><span>{me.features.ai ? 'Hinglish voice to a draft prescription' : 'Turns on when the OpenAI key is added'}</span></span></button>
+        <button className="tool" onClick={() => setVoice(true)}><span className="ic"><Icon n="mic" /></span><span><b>Speak the consult</b><span>{me.features.ai ? 'Hinglish voice to a draft prescription' : 'Voice to a basic draft (add a free Groq key for AI)'}</span></span></button>
         <button className="tool" onClick={() => setScan(true)} disabled={!me.features.ai}><span className="ic"><Icon n="cam" /></span><span><b>Scan old parchi or report</b><span>Photo to medicines and lab values</span></span></button>
       </div>}
 
