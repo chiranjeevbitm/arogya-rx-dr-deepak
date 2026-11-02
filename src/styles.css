@@ -194,7 +194,9 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .vitals { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px }
 @media (max-width: 1250px) { .vitals { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
 .medrow { display: grid; grid-template-columns: 26px minmax(0, 1fr) 36px; gap: 4px 6px; align-items: start; padding: 8px 0 }
-.med-ctl { grid-column: 2 / -1; display: grid; grid-template-columns: 80px 110px 140px 80px; gap: 6px }
+.med-ctl { grid-column: 2 / -1; display: grid; grid-template-columns: 80px 110px 140px 160px; gap: 6px }
+.days-cell { display: flex; gap: 6px; align-items: center; min-width: 0 }
+.days-cell .inp { width: 64px; min-width: 0 }
 @media (max-width: 600px) { .med-ctl { grid-template-columns: 1fr 1fr } }
 .medrow + .medrow { border-top: 1px dashed var(--line) }
 .medrow .nm { font-weight: 700; font-size: 14.5px; line-height: 1.25 }

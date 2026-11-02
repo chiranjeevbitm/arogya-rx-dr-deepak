@@ -198,6 +198,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
 
       <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Follow-up</span></div>
         <div className="row wrap"><div className="chips">{[0, 3, 5, 7, 10, 14, 30, 60, 90].map(d => <button key={d} type="button" className={'chip' + ((data.follow_up?.days || 0) === d ? ' on' : '')} onClick={() => set('follow_up', { ...(data.follow_up || {}), days: d || null })}>{d ? (d < 30 ? `${d} days` : `${d / 30} month${d > 30 ? 's' : ''}`) : 'None'}</button>)}</div>
+          <label className="row" style={{ gap: 6 }}><input className="inp sm" style={{ width: 84 }} inputMode="numeric" placeholder="days" aria-label="Follow-up after (days)" title="Type any number of days" value={data.follow_up?.days ?? ''} onChange={e => { const n = parseInt(e.target.value.replace(/\D/g, '')); set('follow_up', { ...(data.follow_up || {}), days: n ? Math.min(365, n) : null }) }} /><span className="small muted">days</span></label>
           <input className="inp sm" style={{ width: 190 }} placeholder="Note, e.g. bring reports" value={data.follow_up?.note || ''} onChange={e => set('follow_up', { ...(data.follow_up || {}), note: e.target.value })} /></div>
       </fieldset>
 
@@ -270,6 +271,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
 }
 
 function MedRow({ i, m, set, remove, move, alerted, ro, regular, onStar }: { regular: boolean; onStar: () => void; i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ro: boolean }) {
+  const ongoing = /^regular$/i.test((m.duration || '').trim())
   const [more, setMore] = useState(false)
   return <div className={'medrow' + (alerted ? ' alerted' : '') + (more ? ' expanded' : '')}>
     <span className="sn">{i + 1}</span>
@@ -288,7 +290,10 @@ function MedRow({ i, m, set, remove, move, alerted, ro, regular, onStar }: { reg
     <select className="inp sm" value={m.timing || ''} onChange={e => set({ timing: e.target.value as Med['timing'] })} aria-label="Food timing">
       <option value="">Any time</option><option value="after">After food</option><option value="before">Before food</option><option value="empty">Empty stomach</option><option value="with">With food</option>
     </select>
-    <input className="inp sm" inputMode="numeric" value={m.days ?? ''} placeholder="days" onChange={e => set({ days: e.target.value ? Math.min(3650, parseInt(e.target.value) || 0) : null, duration: '' })} aria-label="Days" title="Days" />
+    <div className="days-cell">
+      {!ongoing && <input className="inp sm" inputMode="numeric" value={m.days ?? ''} placeholder="days" onChange={e => set({ days: e.target.value ? Math.min(3650, parseInt(e.target.value) || 0) : null, duration: '' })} aria-label="Days" title="Days" />}
+      <button type="button" className={'chip' + (ongoing ? ' on' : '')} aria-pressed={ongoing} title={ongoing ? 'Regular: no end date. Click to set days instead' : 'Take regularly, no end date'} onClick={() => set(ongoing ? { duration: '', days: null } : { duration: 'Regular', days: null })}>Regular</button>
+    </div>
     </div>
     {more && <div className="med-more">
       <select className="inp sm" style={{ width: 130 }} value={m.route || 'Oral'} onChange={e => set({ route: e.target.value })} aria-label="Route">{ROUTES.map(r => <option key={r}>{r}</option>)}</select>

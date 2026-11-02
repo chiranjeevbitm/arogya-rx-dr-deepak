@@ -116,7 +116,7 @@ function daysEn(m: Med) {
   return `${m.days} day${m.days === 1 ? '' : 's'}`
 }
 function daysHi(m: Med) {
-  if (m.duration) return /continue|cont/i.test(m.duration) ? 'लगातार' : m.duration
+  if (m.duration) return /^regular$/i.test(m.duration.trim()) ? 'नियमित' : /continue|cont/i.test(m.duration) ? 'लगातार' : m.duration
   if (!m.days) return ''
   if (normFreq(m.freq) === 'Weekly' && m.days % 7 === 0) return `${m.days / 7} हफ़्ते`
   if (m.days % 30 === 0 && m.days >= 30) return `${m.days / 30} महीने`
