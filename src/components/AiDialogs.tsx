@@ -93,11 +93,18 @@ export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string;
   const toast = useToast()
   const [busy, setBusy] = useState(false), [scan, setScan] = useState<Scan | null>(null), [preview, setPreview] = useState(''), secs = useElapsed(busy)
   const [labSel, setLabSel] = useState<boolean[]>([]), [date, setDate] = useState(istToday()), [addAllergy, setAddAllergy] = useState(true), [addDx, setAddDx] = useState(true)
-  const file = useRef<HTMLInputElement>(null)
+  const file = useRef<HTMLInputElement>(null), pick = useRef<HTMLInputElement>(null), [pdfName, setPdfName] = useState('')
   const go = async (f: File) => {
+    const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+    if (!isPdf && !f.type.startsWith('image/')) { toast('Choose a photo (JPG, PNG, WebP) or a PDF.', 'err'); return }
+    if (isPdf && f.size > 3_000_000) { toast('This PDF is larger than 3 MB. Upload a smaller PDF, or a photo of the page.', 'err'); return }
     setBusy(true)
     try {
-      const img = await compressImage(f); setPreview(img)
+      let img: string
+      if (isPdf) {
+        const data = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('Could not read this file.')); r.readAsDataURL(f) })
+        img = data.replace(/^data:[^;,]*/, 'data:application/pdf'); setPreview(''); setPdfName(f.name)
+      } else { img = await compressImage(f); setPreview(img); setPdfName('') }
       const s = await api<Scan>('/ai/scan', { body: { patient_id: patientId, image: img } })
       setScan(s); setLabSel(s.labs.map(() => true)); if (s.doc_date) setDate(s.doc_date)
     } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) }
@@ -112,15 +119,21 @@ export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string;
       onSaved({ labs: items.length, allergies: addAllergy ? scan.allergies : [], conditions: addDx ? scan.diagnoses : [], summary })
     } catch (e: any) { toast(e.message, 'err') } finally { setBusy(false) }
   }
-  return <Modal title="Read an old prescription or report" width={760} onClose={onClose} footer={scan ? <><button className="btn" onClick={() => { setScan(null); setPreview('') }}>Another photo</button><button className="btn primary" disabled={busy} onClick={save}>Save to patient history</button></> : undefined}>
-    <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => e.target.files?.[0] && go(e.target.files[0])} />
+  return <Modal title="Read an old prescription or report" width={760} onClose={onClose} footer={scan ? <><button className="btn" onClick={() => { setScan(null); setPreview(''); setPdfName('') }}>Another photo or PDF</button><button className="btn primary" disabled={busy} onClick={save}>Save to patient history</button></> : undefined}>
+    <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) go(f) }} />
+    <input ref={pick} type="file" accept="image/*,application/pdf,.pdf" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) go(f) }} />
     {!scan && <div className="stack" style={{ alignItems: 'center', padding: '20px 0' }}>
       {preview && <img src={preview} alt="" style={{ maxHeight: 240, borderRadius: 8 }} />}
-      <button className="btn primary lg" disabled={busy} onClick={() => file.current?.click()}><Icon n="cam" />{busy ? `Reading the document… ${secs} s (usually under 30)` : 'Take or choose a photo'}</button>
-      <p className="small muted" style={{ textAlign: 'center', maxWidth: 420 }}>Lay the page flat in good light. Handwriting is read where legible; nothing is saved until you confirm.</p>
+      {pdfName && <div className="tag">{pdfName}</div>}
+      {busy ? <button className="btn primary lg" disabled>{`Reading the document… ${secs} s (usually under 30)`}</button>
+        : <div className="row wrap" style={{ justifyContent: 'center' }}>
+          <button className="btn primary lg" onClick={() => file.current?.click()}><Icon n="cam" />Take a photo</button>
+          <button className="btn lg" onClick={() => pick.current?.click()}><Icon n="plus" />Upload image or PDF</button>
+        </div>}
+      <p className="small muted" style={{ textAlign: 'center', maxWidth: 420 }}>PDF up to 3 MB. Lay the page flat in good light. Handwriting is read where legible; nothing is saved until you confirm.</p>
     </div>}
     {scan && <div className="grid2" style={{ alignItems: 'start' }}>
-      <img src={preview} alt="Document" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--line)' }} />
+      {preview ? <img src={preview} alt="Document" style={{ width: '100%', borderRadius: 8, border: '1px solid var(--line)' }} /> : <div className="card" style={{ padding: 16 }}><Icon n="file" /> <b className="small">{pdfName || 'PDF'}</b><p className="small muted">Saved to the patient's documents.</p></div>}
       <div className="stack">
         {!scan.legible && <div className="alert warn small">Much of this page was hard to read. Check every value.</div>}
         <div className="small"><b>{scan.doc_type === 'lab_report' ? 'Lab report' : scan.doc_type === 'old_rx' ? 'Old prescription' : 'Document'}</b>{scan.source_name ? `, ${scan.source_name}` : ''}</div>

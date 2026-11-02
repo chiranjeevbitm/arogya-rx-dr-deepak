@@ -106,13 +106,14 @@ r.post('/scan', async c => {
   const b = await body(c, z.object({ patient_id: z.string().uuid(), image: z.string().max(8_000_000) }))
   const u = me(c)
   await rateLimit(`ai:${u.id}`, 120, 3600)
-  const m = b.image.match(/^data:(image\/(jpeg|png|webp));base64,(.+)$/)
-  if (!m) throw new HttpError(400, 'Send a JPG, PNG or WebP photo.')
+  const m = b.image.match(/^data:((?:image\/(?:jpeg|png|webp))|application\/pdf);base64,(.+)$/)
+  if (!m) throw new HttpError(400, 'Send a JPG, PNG or WebP photo, or a PDF.')
+  const isPdf = m[1] === 'application/pdf'
   const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
   if (!p) throw new HttpError(404, 'Patient not found.')
-  const file = await putFile({ clinicId: u.clinic_id, kind: 'scan', mime: m[1], data: Buffer.from(m[3], 'base64'), userId: u.id })
+  const file = await putFile({ clinicId: u.clinic_id, kind: 'scan', mime: m[1], data: Buffer.from(m[2], 'base64'), userId: u.id })
   const out = await aiJson<any>({ kind: 'scan', clinicId: u.clinic_id, userId: u.id, system: SCAN_SYSTEM, schemaName: 'medical_document', schema: SCAN_SCHEMA, effort: 'medium', maxTokens: 16000,
-    parts: [{ type: 'input_text', text: 'Extract this document.' }, { type: 'input_image', image_url: b.image, detail: 'high' }] })
+    parts: [{ type: 'input_text', text: 'Extract this document.' }, isPdf ? { type: 'input_file', filename: 'document.pdf', file_data: b.image } : { type: 'input_image', image_url: b.image, detail: 'high' }] })
   const docDate = /^\d{4}-\d{2}-\d{2}$/.test(out.doc_date) && out.doc_date <= istToday() ? out.doc_date : null
   const [doc] = await sql()`insert into arx.documents (clinic_id, patient_id, file_id, kind, doc_date, extracted, created_by)
     values (${u.clinic_id}, ${b.patient_id}, ${file.id}, ${out.doc_type}, ${docDate}, ${sql().json(out)}, ${u.id}) returning id`
