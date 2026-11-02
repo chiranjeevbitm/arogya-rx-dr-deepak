@@ -63,6 +63,12 @@ function Shell({ children }: { children: React.ReactNode }) {
     const ric = (window as any).requestIdleCallback as undefined | ((f: () => void, o?: any) => number)
     if (ric) ric(warm, { timeout: 3000 }); else setTimeout(warm, 1500)
   }, [])
+  // keep the database connection warm while the app is open, so the first "Call next patient" is not a cold start
+  useEffect(() => {
+    const ping = () => { if (document.visibilityState === 'visible') fetch('/api/health?db=1', { cache: 'no-store' }).catch(() => {}) }
+    ping(); const t = setInterval(ping, 90_000); document.addEventListener('visibilitychange', ping)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', ping) }
+  }, [])
   const logout = async () => { await api('/auth/logout', { method: 'POST' }); location.href = '/' }
   return <div className={'shell' + (slim ? ' slim' : '')}>
     <aside className="rail no-print">

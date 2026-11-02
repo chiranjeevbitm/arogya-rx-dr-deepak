@@ -50,7 +50,7 @@ app.use('*', async (c, next) => {
   const t0 = performance.now()
   c.set('dbGen', dbGen())
   // a query stuck on a dead socket would otherwise hang until the 60 s platform limit; give up early so the request can be retried on a fresh pool
-  const budget = /^\/api\/(ai|ask|import|setup|messages\/reminders|cron)\b/.test(c.req.path) ? 58000 : 12000
+  const budget = /^\/api\/(ai|ask|import|setup|messages\/reminders|cron)\b/.test(c.req.path) ? 58000 : /^\/api\/(visits\/(next|[^/]+\/start)|rx\/[^/]+$)/.test(c.req.path) ? 25000 : 12000
   let timer: ReturnType<typeof setTimeout> | undefined, warm = 0
   const work = (async () => {
     if (!c.req.path.startsWith('/api/health')) { await warmDb(); await ensureSchema(); warm = performance.now() - t0 }

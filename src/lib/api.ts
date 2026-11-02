@@ -35,6 +35,9 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   // the server dropped a stale database connection and reset it: one safe retry for reads and AI drafts
   // (reads are already retried once on the server; only AI drafts are retried here, after their long wait)
   if (r.status === 503 && /DB_RETRY/.test(text) && path.startsWith('/ai/') && !(opts as any)._retried) return api<T>(path, { ...opts, _retried: true } as any)
+  // database busy or connection reset on a cold start: one automatic retry for reads and for opening a patient (opening twice is safe)
+  const safe = (opts.method || 'GET') === 'GET' || /^\/visits\/(next|[^/]+\/start)/.test(path)
+  if (r.status === 503 && /DB_BUSY|DB_RETRY/.test(text) && safe && !(opts as any)._retried) return api<T>(path, { ...opts, _retried: true } as any)
   let j: any = null
   try { j = text ? JSON.parse(text) : null } catch { j = { error: text } }
   if (!r.ok) {
