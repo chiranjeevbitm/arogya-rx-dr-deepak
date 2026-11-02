@@ -17,6 +17,13 @@ import App from './App'
 import { SessionProvider } from './lib/session'
 import { ToastHost } from './components/ui'
 
+// A tab opened before an update still points at old file names that no longer exist: load the new version once.
+window.addEventListener('vite:preloadError', e => {
+  try { if (sessionStorage.getItem('arx-reloaded') === '1') return; sessionStorage.setItem('arx-reloaded', '1') } catch { /* private mode: just reload */ }
+  e.preventDefault(); location.reload()
+})
+setTimeout(() => { try { sessionStorage.removeItem('arx-reloaded') } catch { /* ignore */ } }, 15000)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode><BrowserRouter><ToastHost><SessionProvider><App /></SessionProvider></ToastHost></BrowserRouter></StrictMode>
 )
