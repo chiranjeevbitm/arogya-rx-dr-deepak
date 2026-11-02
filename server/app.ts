@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { ensureSchema, HttpError, warmDb, markDbUse } from './db.js'
+import { ensureSchema, HttpError, warmDb, markDbUse, resetDb, isDeadConnection } from './db.js'
 import type { AuthUser } from './lib/auth.js'
 import auth from './routes/auth.js'
 import setup from './routes/setup.js'
@@ -75,6 +75,7 @@ app.onError((e, c) => {
   const pg = e as any
   if (pg?.code === '23505') return c.json({ error: 'This already exists.' }, 409)
   if (pg?.code === '22P02') return c.json({ error: 'Invalid id.' }, 400)
+  if (isDeadConnection(pg)) { resetDb(); console.error('[api] dead db connection, pool reset', c.req.method, c.req.path); return c.json({ error: 'The connection dropped. Trying again…', code: 'DB_RETRY' }, 503) }
   console.error('[api]', c.req.method, c.req.path, e)
   return c.json({ error: 'Something went wrong on the server. Please try again.' }, 500)
 })

@@ -6,17 +6,21 @@ let lastUse = Date.now()
 
 /** A serverless instance can be frozen between requests; the pooler then drops its idle connections and the next query
     would hang until the platform timeout. After a pause we test the connection first and rebuild it when it is dead. */
-export async function warmDb(): Promise<void> {
+export async function warmDb(force = false): Promise<void> {
   const idle = Date.now() - lastUse
   lastUse = Date.now()
-  if (!_sql || idle < 4000) return
+  if (!_sql || (!force && idle < 3000)) return
   try {
     await Promise.race([_sql`select 1`, new Promise((_, rej) => setTimeout(() => rej(new Error('stale db connection')), 2500))])
-  } catch {
-    const old = _sql; _sql = null
-    old?.end({ timeout: 1 }).catch(() => {})
-  }
+  } catch { resetDb() }
 }
+/** Throw the connection pool away so the next query builds fresh connections. */
+export function resetDb() {
+  const old = _sql; _sql = null
+  old?.end({ timeout: 1 }).catch(() => {})
+}
+const DEAD = new Set(['CONNECTION_DESTROYED', 'CONNECTION_CLOSED', 'CONNECTION_ENDED', 'CONNECTION_CONNECT_TIMEOUT', 'ECONNRESET', 'EPIPE'])
+export const isDeadConnection = (e: any) => DEAD.has(e?.code) || DEAD.has(e?.errno)
 export const markDbUse = () => { lastUse = Date.now() }
 
 // Supabase's direct host (db.<ref>.supabase.co) is IPv6-only and does not resolve on Vercel.
@@ -42,8 +46,8 @@ export function sql(): postgres.Sql {
   _sql = postgres(url, {
     prepare: false,                 // Supabase transaction pooler (port 6543)
     max: local ? 10 : 3,
-    idle_timeout: 4,
-    max_lifetime: 120,
+    idle_timeout: 20,               // closing idle sockets every few seconds raced with new queries (CONNECTION_DESTROYED)
+    max_lifetime: 300,
     connect_timeout: 10,
     keep_alive: 10,
     ssl: local ? false : 'require',

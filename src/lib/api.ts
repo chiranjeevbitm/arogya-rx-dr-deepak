@@ -1,6 +1,6 @@
 export class ApiError extends Error { constructor(public status: number, message: string, public code?: string) { super(message) } }
 
-export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
+export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number; _retried?: boolean } = {}): Promise<T> {
   const method = opts.method || (opts.body ? 'POST' : 'GET')
   // AI reading and imports legitimately take 10-50 s; everything else is cut at 15 s
   const limit = opts.timeoutMs ?? (/^\/(ai|ask|import|setup)\b/.test(path) ? 70000 : 15000)
@@ -20,6 +20,8 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   }
   if (!r) throw lastErr
   const text = await r.text()
+  // the server dropped a stale database connection and reset it: one safe retry for reads and AI drafts
+  if (r.status === 503 && /DB_RETRY/.test(text) && (method === 'GET' || path.startsWith('/ai/')) && !(opts as any)._retried) return api<T>(path, { ...opts, _retried: true } as any)
   let j: any = null
   try { j = text ? JSON.parse(text) : null } catch { j = { error: text } }
   if (!r.ok) {

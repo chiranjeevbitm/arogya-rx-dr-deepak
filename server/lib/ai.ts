@@ -1,6 +1,6 @@
 /* LLM calls via OpenAI's Responses API (default model gpt-5-nano) with strict JSON-schema output.
    Every output is a draft that the doctor reviews; nothing is saved or printed from here. */
-import { sql, HttpError } from '../db.js'
+import { sql, HttpError, warmDb } from '../db.js'
 
 export const aiConfigured = () => !!process.env.OPENAI_API_KEY
 const base = () => (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -37,6 +37,7 @@ export async function aiJson<T>(o: {
     if (!text) throw new HttpError(502, body.status === 'incomplete' ? 'The AI ran out of space before finishing. Try a shorter recording or a clearer photo.' : 'The AI returned no answer.')
     const out = JSON.parse(text) as T
     ok = true
+    await warmDb(true)   // the connection sat idle during the AI call: check it before the next query
     return out
   } catch (e: any) {
     err = String(e?.message || e).slice(0, 300)
