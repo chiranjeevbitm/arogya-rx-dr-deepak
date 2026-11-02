@@ -53,6 +53,7 @@ r = await call('PUT', `/api/rx/${rxId}`, { data, meds }, 'doctor'); ok(r.status 
 r = await call('POST', `/api/rx/${rxId}/finalize`, { data, meds }, 'doctor'); ok(r.status === 409 && r.j.code === 'SAFETY' && /allergic to Sulfonamide/.test(r.j.error), 'sulfa allergy blocks finalise', r)
 const meds2 = [{ name: 'Nitrofurantoin 100 mg Capsule', kind: 'brand', form: 'CAP', dose: '1', freq: '1-0-1', timing: 'after', days: 5 }, { name: 'Paracetamol 650 mg Tablet', kind: 'ja', form: 'TAB', dose: '1', freq: 'SOS', timing: 'after', days: 3 }]
 r = await call('POST', `/api/rx/${rxId}/finalize`, { data, meds: meds2 }, 'doctor'); ok(r.status === 200, 'finalise with safe medicines', r)
+r = await call('POST', `/api/rx/${rxId}/finalize`, { data, meds: meds2 }, 'doctor'); ok(r.status === 200 && r.j.already === true, 'finalising twice is harmless (nothing is counted twice)', r)
 r = await call('PUT', `/api/rx/${rxId}`, { data, meds: meds2 }, 'doctor'); ok(r.status === 409, 'final prescription is locked', r)
 r = await call('GET', '/api/visits', null, 'reception'); ok(r.j.find(v => v.id === visit1.id)?.status === 'done', 'visit marked done', r.j)
 r = await call('GET', '/api/appointments?from=2000-01-01&to=2100-01-01', null, 'reception'); ok(r.j.some(a => a.source === 'follow_up' && a.name === 'Sita Devi'), 'follow-up appointment auto-booked', r.j)
@@ -94,6 +95,14 @@ const rx1 = r.j.prescriptions.find(p => p.rx_date.startsWith('2026-08-01'))
 ok(rx1 && rx1.meds[0].freq === '1-0-1' && rx1.meds[0].days === 30 && rx1.meds[0].timing === 'after', 'imported medicine mapped (1-0-1, 30 days, after food)', rx1?.meds)
 ok(r.j.labs.some(l => l.test === 'HbA1c' && l.value_num === 7.2), 'imported HbA1c becomes a trend point', r.j.labs)
 r = await call('GET', `/api/rx/${rx1.id}`, null, 'doctor'); ok(r.j.rx.data.comorbid_details.diabetes.neuropathy === true && r.j.rx.data.systemic.cvs.includes('S1 S2 normal'), 'comorbidity details + CVS carried over', r.j.rx.data)
+// one-request "call next", and two devices pressing it together must get different patients
+r = await call('POST', '/api/visits', { patient: { name: 'Ravi Kumar', sex: 'M', age_years: 33, phone: '9934000003' }, complaint: 'Cough' }, 'reception'); ok(r.status === 200, 'a third patient joins the queue', r)
+r = await call('POST', '/api/visits', { patient: { name: 'Geeta Devi', sex: 'F', age_years: 51, phone: '9934000004' }, complaint: 'Knee pain' }, 'reception'); ok(r.status === 200, 'a fourth patient joins the queue', r)
+const [n1, n2] = await Promise.all([call('POST', '/api/visits/next?start=1', {}, 'doctor'), call('POST', '/api/visits/next?start=1', {}, 'doctor')])
+ok(n1.status === 200 && n2.status === 200 && n1.j.rx_id && n2.j.rx_id && n1.j.visit_id !== n2.j.visit_id && n1.j.rx_id !== n2.j.rx_id, 'two devices calling next together get different patients, each with a draft', [n1.j, n2.j])
+r = await call('POST', `/api/visits/${n1.j.visit_id}/start`, {}, 'doctor'); ok(r.j.rx_id === n1.j.rx_id, 'starting an already opened visit returns the same draft', r)
+r = await call('GET', '/api/clinic/system', null, 'doctor'); ok(r.status === 200 && r.j.counts.patients >= 4 && r.j.counts.final_prescriptions >= 1 && typeof r.j.db_ms === 'number', 'system check returns record counts and timing', r)
+r = await call('GET', '/api/clinic/system', null, 'reception'); ok(r.status === 403, 'reception cannot open the system check', r)
 r = await call('GET', '/api/clinic/audit', null, 'doctor'); ok(r.j.some(a => a.action === 'rx.finalize') && r.j.some(a => a.action === 'login.failed'), 'audit log records actions', r.j.slice?.(0, 3))
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')

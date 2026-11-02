@@ -80,31 +80,42 @@ r.patch('/:id', async c => {
   return c.json(v)
 })
 
+/** Marks a visit with_doctor and returns its draft prescription (created if needed). Safe to call twice: the second call finds the same draft. */
+async function startVisit(tx: any, clinicId: string, userId: string, v: any): Promise<string> {
+  if (v.status === 'waiting') await tx`update arx.visits set status = 'with_doctor', started_at = coalesce(started_at, now()) where id = ${v.id}`
+  const [ex] = await tx`select id from arx.prescriptions where visit_id = ${v.id} order by created_at desc limit 1`
+  if (ex) return ex.id
+  const data = { complaints: v.complaint || '', vitals: v.vitals || {}, exam: {}, systemic: {}, comorbid: {}, comorbid_details: {}, addiction: {}, investigations: [], advice: [], diagnosis: '', follow_up: { days: null, note: '' }, hindi: true }
+  // carry chronic conditions and comorbidity details forward from the last final prescription
+  const [last] = await tx`select data from arx.prescriptions where patient_id = ${v.patient_id} and status = 'final' order by rx_date desc, created_at desc limit 1`
+  if (last) { data.comorbid = last.data.comorbid || {}; data.comorbid_details = last.data.comorbid_details || {}; data.addiction = last.data.addiction || {} }
+  const [n] = await tx`insert into arx.prescriptions (clinic_id, patient_id, visit_id, rx_date, data, created_by)
+    values (${clinicId}, ${v.patient_id}, ${v.id}, ${istToday()}, ${tx.json(data as any)}, ${userId}) returning id`
+  return n.id
+}
+
 /** Doctor opens a visit: marks it with_doctor and returns the draft prescription (created if needed). */
 r.post('/:id/start', requireAuth('doctor', 'admin'), async c => {
   const u = me(c)
-  const rx = await sql().begin(async tx => {
+  const rxId = await sql().begin(async tx => {
     const [v] = await tx`select * from arx.visits where id = ${P(c, 'id')} and clinic_id = ${u.clinic_id} for update`
     if (!v) throw new HttpError(404, 'Visit not found.')
-    if (v.status === 'waiting') await tx`update arx.visits set status = 'with_doctor', started_at = coalesce(started_at, now()) where id = ${v.id}`
-    const [ex] = await tx`select id from arx.prescriptions where visit_id = ${v.id} order by created_at desc limit 1`
-    if (ex) return ex
-    const data = { complaints: v.complaint || '', vitals: v.vitals || {}, exam: {}, systemic: {}, comorbid: {}, comorbid_details: {}, addiction: {}, investigations: [], advice: [], diagnosis: '', follow_up: { days: null, note: '' }, hindi: true }
-    // carry chronic conditions and comorbidity details forward from the last final prescription
-    const [last] = await tx`select data from arx.prescriptions where patient_id = ${v.patient_id} and status = 'final' order by rx_date desc, created_at desc limit 1`
-    if (last) { data.comorbid = last.data.comorbid || {}; data.comorbid_details = last.data.comorbid_details || {}; data.addiction = last.data.addiction || {} }
-    const [n] = await tx`insert into arx.prescriptions (clinic_id, patient_id, visit_id, rx_date, data, created_by)
-      values (${u.clinic_id}, ${v.patient_id}, ${v.id}, ${istToday()}, ${tx.json(data as any)}, ${u.id}) returning id`
-    return n
+    return startVisit(tx, u.clinic_id, u.id, v)
   })
-  return c.json({ rx_id: rx.id })
+  return c.json({ rx_id: rxId })
 })
 
-/** Next waiting token. */
+/** Next waiting token. With ?start=1 it also opens that visit and returns { visit_id, rx_id }, so "Call next patient" is one
+    request instead of two (each one is a full trip from the clinic). `skip locked` means two devices pressing it at the same
+    moment get two different patients instead of both opening the same token. */
 r.post('/next', requireAuth('doctor', 'admin'), async c => {
-  const [v] = await sql()`select id from arx.visits where clinic_id = ${me(c).clinic_id} and visit_date = ${istToday()} and status = 'waiting' order by token limit 1`
-  if (!v) throw new HttpError(404, 'No one is waiting.')
-  return c.json({ visit_id: v.id })
+  const u = me(c), start = c.req.query('start') === '1'
+  const out = await sql().begin(async tx => {
+    const [v] = await tx`select * from arx.visits where clinic_id = ${u.clinic_id} and visit_date = ${istToday()} and status = 'waiting' order by token limit 1 for update skip locked`
+    if (!v) throw new HttpError(404, 'No one is waiting.')
+    return { visit_id: v.id as string, ...(start ? { rx_id: await startVisit(tx, u.clinic_id, u.id, v) } : {}) }
+  })
+  return c.json(out)
 })
 
 export default r

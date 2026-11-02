@@ -1,0 +1,25 @@
+name: Keep the clinic app warm
+
+# A function and a free Supabase database that have been idle take 1.5-3 s to answer the first request. This asks the
+# app (and the database) for a tiny reply every 5 minutes during clinic hours, and once a night so the free database is
+# never paused for inactivity. Free on a public repository. GitHub may delay a scheduled run by several minutes, and it
+# switches scheduled workflows off after 60 days without any repository activity: an outside pinger (UptimeRobot or
+# cron-job.org, free) on the same address is a good second line.
+
+on:
+  schedule:
+    - cron: '*/5 3-16 * * *'   # every 5 minutes, 08:30 to 22:30 IST
+    - cron: '17 21 * * *'      # once at 02:47 IST
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ask the app and the database for a reply
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://arogya-rx-dr-deepak.vercel.app' }}
+        run: curl -fsS --max-time 30 --retry 2 --retry-delay 5 "${APP_URL}/api/health?db=1"

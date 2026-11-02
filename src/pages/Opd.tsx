@@ -37,15 +37,19 @@ function DoctorOpd() {
   const wide = Math.round((box.current?.clientWidth || 1400) * 0.58)
   const view = sideW <= 330 ? 'form' : sideW >= wide - 40 ? 'parchi' : 'split'
   const list = (q.data || []).filter(v => v.status !== 'cancelled').sort((a, b) => a.token - b.token)
+  /** Show the token as "with doctor" at once; the server confirms a moment later and the next refresh replaces this. */
+  const markWith = (id: string) => q.data && q.setData(q.data.map(x => x.id === id && x.status === 'waiting' ? { ...x, status: 'with_doctor' } : x))
   const open = async (v: Visit) => {
     if (v.rx_id && v.rx_id === rxId) return
-    try { const r = await api<{ rx_id: string }>(`/visits/${v.id}/start`, { method: 'POST' }); q.reload(); nav(`/opd/${r.rx_id}`) } catch (e: any) { toast(e.message, 'err') }
-  }
-  const next = async () => {
-    try { const r = await api<{ visit_id: string }>('/visits/next', { method: 'POST' }); const s = await api<{ rx_id: string }>(`/visits/${r.visit_id}/start`, { method: 'POST' }); q.reload(); nav(`/opd/${s.rx_id}`) }
-    catch (e: any) { toast(e.message, e.status === 404 ? 'info' : 'err'); nav('/opd') }
+    markWith(v.id)
+    try { const r = await api<{ rx_id: string }>(`/visits/${v.id}/start`, { method: 'POST' }); q.reload(); nav(`/opd/${r.rx_id}`) } catch (e: any) { toast(e.message, 'err'); q.reload() }
   }
   const waiting = list.filter(v => v.status === 'waiting')
+  const next = async () => {
+    if (waiting[0]) markWith(waiting[0].id)
+    try { const r = await api<{ visit_id: string; rx_id: string }>('/visits/next?start=1', { method: 'POST' }); q.reload(); nav(`/opd/${r.rx_id}`) }
+    catch (e: any) { toast(e.message, e.status === 404 ? 'info' : 'err'); q.reload(); nav('/opd') }
+  }
   // on every load: tell the doctor which patients in the queue still hold a valid parchi (21 days)
   const told = useRef(false)
   useEffect(() => {

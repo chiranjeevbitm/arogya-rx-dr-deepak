@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { sql, HttpError } from '../db.js'
+import { sql, HttpError, dbRegion } from '../db.js'
 import { body, me, P, type Env } from '../app.js'
 import { requireAuth, hashPassword, forgetUser } from '../lib/auth.js'
 import { audit } from '../lib/audit.js'
@@ -76,6 +76,25 @@ r.patch('/staff/:id', requireAuth('doctor', 'admin'), async c => {
 r.get('/audit', requireAuth('doctor', 'admin'), async c => {
   return c.json(await sql()`select a.id, a.action, a.entity, a.entity_id, a.meta, a.ip, a.at, u.name as user_name
     from arx.audit_log a left join arx.users u on u.id = a.user_id where a.clinic_id = ${me(c).clinic_id} order by a.at desc limit 200`)
+})
+
+/** Where the server and the database run, how long one query takes, and how many records exist.
+    Used by Settings → Security → Speed check to confirm the Mumbai move and to compare counts after a restore. */
+r.get('/system', requireAuth('doctor', 'admin'), async c => {
+  const cid = me(c).clinic_id, db = sql()
+  await db`select 1`                                   // first query pays for connection setup; time the second
+  const t0 = performance.now(); await db`select 1`; const db_ms = Math.round(performance.now() - t0)
+  const [n] = await db`select
+      (select count(*) from arx.patients where clinic_id = ${cid})::int as patients,
+      (select count(*) from arx.prescriptions where clinic_id = ${cid})::int as prescriptions,
+      (select count(*) from arx.prescriptions where clinic_id = ${cid} and status = 'final')::int as final_prescriptions,
+      (select count(*) from arx.visits where clinic_id = ${cid})::int as visits,
+      (select count(*) from arx.bills where clinic_id = ${cid})::int as bills,
+      (select count(*) from arx.lab_results where clinic_id = ${cid})::int as lab_results,
+      (select count(*) from arx.documents where clinic_id = ${cid})::int as documents,
+      (select count(*) from arx.files where clinic_id = ${cid})::int as files,
+      (select count(*) from arx.medicines)::int as medicines`
+  return c.json({ fn_region: process.env.VERCEL_REGION || null, db_region: dbRegion(), db_ms, counts: n })
 })
 
 /* ---- dashboard summary ---- */

@@ -233,23 +233,32 @@ function Import() {
 }
 
 /** Sends a few small requests and reports how long the trip to the server takes from this device, so slowness can be measured, not guessed. */
+type SysInfo = { fn_region: string | null; db_region: string | null; db_ms: number; counts: Record<string, number> }
 function SpeedCheck() {
-  const [res, setRes] = useState<{ trip: number; server: number; db: number } | null>(null), [busy, setBusy] = useState(false)
+  const me = useMe()
+  const [res, setRes] = useState<{ trip: number; server: number; db: number } | null>(null), [busy, setBusy] = useState(false), [sys, setSys] = useState<SysInfo | null>(null)
   const med = (a: number[]) => { const b = [...a].sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0 }
   const run = async () => {
-    setBusy(true); setRes(null)
+    setBusy(true); setRes(null); setSys(null)
     try {
       const from = timings.length
       for (let i = 0; i < 5; i++) await api('/health?db=1')
       const t = timings.slice(from)
       setRes({ trip: med(t.map(x => x.ms)), server: med(t.map(x => x.server ?? 0)), db: Math.max(...t.map(x => x.ms)) })
+      if (me.user.role !== 'reception') setSys(await api<SysInfo>('/clinic/system').catch(() => null))
     } catch { setRes(null) } finally { setBusy(false) }
   }
+  const home = sys && (sys.db_region !== 'ap-south-1' || (sys.fn_region && sys.fn_region !== 'bom1'))
   const slow = timings.filter(t => t.ms > 1500).length
   return <section className="sec"><div className="sec-h"><h3>Speed check</h3></div><div className="sec-b">
     <p className="small muted" style={{ margin: 0 }}>Sends 5 small requests and shows how long each takes from this device. Run it from the clinic computer and send the numbers if pages feel slow.</p>
     <div className="row"><button className="btn" disabled={busy} onClick={run}>{busy ? 'Checking…' : 'Run speed check'}</button>
       {res && <span><b>{res.trip} ms</b> per request (server work {res.server} ms, slowest {res.db} ms). {res.trip < 400 ? 'Fast.' : res.trip < 900 ? 'Acceptable.' : 'Slow: the network or the server region is the cause.'}</span>}</div>
+    {sys && <div className="card stack small" style={{ gap: 6 }}>
+      <div>Server: <b>{sys.fn_region || 'unknown'}</b> · Database: <b>{sys.db_region || 'unknown'}</b> · one database query takes <b>{sys.db_ms} ms</b></div>
+      {home ? <div className="alert warn">The server and database should both be in Mumbai (bom1 and ap-south-1). Check vercel.json and DATABASE_URL.</div> : <div className="muted">Server and database are both in Mumbai.</div>}
+      <div className="muted">Records here: {sys.counts.patients} patients, {sys.counts.prescriptions} prescriptions ({sys.counts.final_prescriptions} final), {sys.counts.visits} visits, {sys.counts.bills} bills, {sys.counts.lab_results} lab results, {sys.counts.documents} documents, {sys.counts.files} files, {sys.counts.medicines} medicines. After a database move, these should match the old database.</div>
+    </div>}
     {slow > 0 && <span className="small muted">{slow} request{slow > 1 ? 's' : ''} took over 1.5 seconds since this page was opened.</span>}
   </div></section>
 }

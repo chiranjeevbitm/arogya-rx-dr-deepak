@@ -118,9 +118,11 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     if (final) return then()
     setBusy(true); finalizing.current = true
     try {
-      await api(`/rx/${rxId}/finalize`, { body: { data: { ...data, cost: cost.known ? { branded: cost.branded, jan: cost.jan, save: cost.save } : undefined }, meds, override_alerts: overrideAlerts } })
+      await inflight.current.catch(() => {})   // a draft save already on its way finishes first, so it cannot land after the prescription is final
+      const r = await api<{ already?: boolean }>(`/rx/${rxId}/finalize`, { body: { data: { ...data, cost: cost.known ? { branded: cost.branded, jan: cost.jan, save: cost.save } : undefined }, meds, override_alerts: overrideAlerts } })
+      if (r?.already) await load()   // it was already final (another device, or a retry): show what is stored, not what this screen had
       setSaved('saved'); setOverride(null); out.reset()
-      setB(x => x && { ...x, rx: { ...x.rx, status: 'final', pdf_file_id: null } })
+      if (!r?.already) setB(x => x && { ...x, rx: { ...x.rx, status: 'final', pdf_file_id: null } })
       onChanged()
       setTimeout(() => { out.ensurePdf(); then() }, 350)
     } catch (e: any) { if (e.code === 'SAFETY') setOverride({ msg: e.message, then }); else toast(e.message, 'err') } finally { setBusy(false); finalizing.current = false }

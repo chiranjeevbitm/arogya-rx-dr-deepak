@@ -86,6 +86,9 @@ r.post('/:id/finalize', requireAuth('doctor', 'admin'), async c => {
   const b = await body(c, RxIn.extend({ book_follow_up: z.boolean().default(true), override_alerts: z.boolean().default(false) }))
   const u = me(c)
   const rx = await load(c, P(c, 'id'))
+  // Already final (a retry after a lost reply, or another device finished it first): do nothing twice. Finalising again would
+  // count medicine usage and lab points a second time. The client reloads the stored version when it sees `already`.
+  if (rx.status === 'final') return c.json({ ok: true, already: true })
   const [p] = await sql()`select * from arx.patients where id = ${rx.patient_id}`
   if (!b.meds.length && !(b.data.advice || []).length && !b.data.diagnosis) throw new HttpError(400, 'Add a diagnosis, medicines or advice before finalising.')
   const egfr = parseFloat(b.data?.comorbid_details?.ckd?.egfr) || null

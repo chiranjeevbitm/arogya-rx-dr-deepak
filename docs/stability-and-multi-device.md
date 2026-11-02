@@ -41,6 +41,21 @@ Fixed (commit ff1b48c):
 
 If it is still slow after this, check Supabase Dashboard → Database → Query Performance for the slowest queries, and confirm the project is not paused or out of free compute.
 
+### 2c. Mumbai move, one-request "Call next", safer repeats (2 Nov, evening)
+
+| Change | Where |
+| --- | --- |
+| Function region `bom1` (was `dub1`); fallback pooler host `ap-south-1`; the database was moved to Supabase Mumbai | `vercel.json`, `server/db.ts` |
+| Settings → Security → Speed check now shows the server and database regions, the time of one database query and the record counts, so a move can be verified and compared with the old database | `GET /api/clinic/system`, `src/pages/Settings.tsx` |
+| "Call next patient" is one request (`POST /visits/next?start=1` returns the visit and its draft); the queue shows the token as "with doctor" at once | `server/routes/visits.ts`, `src/pages/Opd.tsx` |
+| Two devices pressing "Call next" together get different patients (`for update skip locked`) | `server/routes/visits.ts` |
+| Finalising an already final prescription does nothing a second time (no repeated medicine-usage or lab points) and the screen reloads what is stored | `server/routes/rx.ts`, `src/pages/Consult.tsx` |
+| Finalise waits for a draft save that is already on its way, so the "prescription is final" 409 no longer appears | `src/pages/Consult.tsx` |
+| Voice and scan buttons count the seconds while the model works | `src/components/AiDialogs.tsx`, `src/components/ui.tsx` |
+| Weekly encrypted backup and keep-warm ping | `.github/workflows/` (see SETUP.md sections 7 and 8) |
+
+Already safe to repeat without extra work: giving a token to a patient already in today's queue is refused (409), and a visit cannot be billed twice.
+
 ## 3. Multi-device use: current state
 
 One login on several devices (clinic PC, laptop, phone) at the same time was already allowed: logging in on one device does not log out another. What was missing, and is now added:
@@ -59,11 +74,11 @@ Notes:
 
 ## 4. To implement next
 
-1. **Move the database and function to Mumbai** (biggest speed gain): new free Supabase project in `ap-south-1`, `pg_dump` and `pg_restore`, `DATABASE_URL` to the new transaction pooler, `vercel.json` regions to `bom1`, keep the Ireland project 7 days as fallback, set a new database password. Vercel logs already show `region=bom1` on requests while the database is in Ireland, so every query crosses continents.
-2. **Keep-warm ping** every 5 minutes on `/api/health?db=1` (cron-job.org or UptimeRobot, free). Keeps the pool and the Supabase project awake and stops most dead-socket cases.
+1. ~~Move the database and function to Mumbai~~ Done in code and settings (2 Nov). Still to do by hand: confirm the record counts in the Speed check match the Ireland project, keep the Ireland project for 7 days, then pause it; rotate the database password.
+2. ~~Keep-warm ping~~ Added as a GitHub workflow; also add an outside pinger (see SETUP.md section 8).
 3. **Live queue updates across devices**: replace the 10 s polling with Supabase Realtime (or a lightweight change feed) so a token added on the reception PC appears on the doctor's phone at once.
 4. **Device list**: store each session in a `sessions` table (device name, last seen, IP) so the doctor can see and sign out one device instead of all.
-5. **Retry writes safely**: give token add, bill and finalize an idempotency key, so a write that failed on a dead connection can be retried automatically without creating duplicates.
+5. **Retry writes safely** (partly done: finalize is repeat-safe, token add and billing refuse duplicates): a general idempotency key stored in the same transaction as the write, so any write that failed on a dead connection can be retried automatically without duplicates.
 6. **Offline queue** for the clinic PC (service worker keeps today's queue and queues writes until the network returns).
 7. **Sync settings across devices**: refresh clinic settings and templates when a tab regains focus.
-8. **Finalize after pending autosave**: make finalize wait for an in-flight autosave so the harmless "prescription is final" 409 disappears.
+8. ~~Finalize after pending autosave~~ Done.

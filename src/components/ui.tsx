@@ -53,6 +53,17 @@ export function TagInput({ value, onChange, placeholder, suggestions = [] }: { v
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) { return <div className="empty">{label}</div> }
 
+/** Seconds since `on` became true (0 while off), so a long wait can say "12 s" instead of sitting silent. */
+export function useElapsed(on: boolean) {
+  const [s, setS] = useState(0)
+  useEffect(() => {
+    if (!on) { setS(0); return }
+    const t0 = Date.now(), t = setInterval(() => setS(Math.floor((Date.now() - t0) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [on])
+  return s
+}
+
 /** Last result per key, kept for the session: a screen you return to shows its previous data at once
     and refreshes quietly in the background instead of starting from a spinner. */
 const cache = new Map<string, unknown>()

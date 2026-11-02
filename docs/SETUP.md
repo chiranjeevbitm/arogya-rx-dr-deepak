@@ -40,6 +40,31 @@ Until this is done, the WhatsApp button opens WhatsApp with the Hindi message an
 3. Set `AISENSY_API_KEY` (and the campaign names if different: `AISENSY_RX_CAMPAIGN`, `AISENSY_REMINDER_CAMPAIGN`, `AISENSY_BOOKING_CAMPAIGN`).
 Reminders go out daily at 6 pm IST for the next day's bookings.
 
+## 6. Check the Mumbai setup
+After any change to `DATABASE_URL` or `vercel.json`: Settings → Security → **Run speed check**. It should say the server is in `bom1` and the database in `ap-south-1`, and one database query should take under about 20 ms. The record counts shown there (patients, prescriptions, bills …) must match the old database after a move.
+
+## 7. Backups (weekly, free)
+The Supabase free plan has **no automatic backups**, and this repository is public, so the backup is encrypted before it is stored.
+1. Supabase → Connect → **Session pooler** (port 5432, not the transaction pooler) → copy the URI with the password filled in.
+2. GitHub → this repository → Settings → Secrets and variables → Actions → New repository secret:
+   - `BACKUP_DATABASE_URL`: the session pooler URI from step 1.
+   - `BACKUP_PASSPHRASE`: at least 20 random characters. **Keep a copy in your password manager; without it a backup cannot be opened.**
+3. Actions → *Weekly database backup* → Run workflow once and check it turns green. It then runs every Monday at 04:00 IST and keeps the last 8 weeks.
+4. If Supabase moves to a newer Postgres version and the run fails with a version mismatch, set a repository variable `PG_CLIENT_VERSION` (for example `18`).
+
+What it covers: the whole `arx` schema (patients, prescriptions, visits, bills, settings, activity log). It does **not** cover files kept in the Supabase Storage bucket (scanned documents, logo, PDFs); download that bucket from the Supabase dashboard now and then.
+
+Restore into an empty Supabase project:
+```
+gpg --decrypt arx-YYYY-MM-DD.dump.gpg > arx.dump
+psql "$NEW_DIRECT_URL" -c "create schema if not exists extensions; create extension if not exists pg_trgm with schema extensions;"
+pg_restore --no-owner --no-privileges --exit-on-error -d "$NEW_DIRECT_URL" arx.dump
+```
+Then point `DATABASE_URL` at the new project, redeploy, and compare the counts in Settings → Security → Speed check. Practise this once on a spare project before you need it.
+
+## 8. Keep-warm
+`.github/workflows/keepwarm.yml` asks `/api/health?db=1` for a reply every 5 minutes from 08:30 to 22:30 IST and once at night, so the first request of the day is not slow and the free database is never paused. GitHub can delay scheduled runs and switches them off after 60 days without repository activity, so also add a free UptimeRobot or cron-job.org monitor on `https://arogya-rx-dr-deepak.vercel.app/api/health?db=1` (5-minute interval).
+
 ## Security notes
 - Patient data stays in Supabase Mumbai. Only the server connects to the database; the browser never gets a database key.
 - Every login, prescription, bill, settings change and AI use is in the activity log (Settings → Security). It cannot be edited.

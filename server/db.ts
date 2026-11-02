@@ -33,17 +33,26 @@ export const isDeadConnection = (e: any) => DEAD.has(e?.code) || DEAD.has(e?.err
 export const markDbUse = () => { lastUse = Date.now() }
 
 // Supabase's direct host (db.<ref>.supabase.co) is IPv6-only and does not resolve on Vercel.
-// If one is given, switch to the IPv4 transaction pooler (this project is in eu-west-1; override with DB_POOLER_HOST).
+// If one is given, switch to the IPv4 transaction pooler (this project is in Mumbai, ap-south-1; override with DB_POOLER_HOST).
 function usePooler(raw: string): string {
   try {
     const u = new URL(raw)
     const m = /^db\.([a-z0-9]+)\.supabase\.co$/.exec(u.hostname)
     if (!m) return raw
-    u.hostname = process.env.DB_POOLER_HOST || 'aws-0-eu-west-1.pooler.supabase.com'
+    u.hostname = process.env.DB_POOLER_HOST || 'aws-0-ap-south-1.pooler.supabase.com'
     u.port = '6543'
     if (!u.username.includes('.')) u.username = `${u.username}.${m[1]}`
     return u.toString()
   } catch { return raw }
+}
+
+/** Supabase region of the database the server is using (e.g. "ap-south-1"), read from the pooler host name. Never the password. */
+export function dbRegion(): string | null {
+  try {
+    const raw = process.env.DATABASE_URL
+    if (!raw) return null
+    return /^aws-\d+-(.+)\.pooler\.supabase\.com$/.exec(new URL(usePooler(raw)).hostname)?.[1] ?? null
+  } catch { return null }
 }
 
 export function sql(): postgres.Sql {

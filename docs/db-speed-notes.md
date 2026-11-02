@@ -6,11 +6,12 @@
 
 ## Where the time goes in this app
 1. Cold start: a Vercel function that has been idle reconnects to the pooler (TLS, ~100-300 ms) and the Supabase free instance may have sleeping CPU.
-2. Round trips: each API call did one query for the session user, then the real queries. Vercel (dub1) to Supabase (eu-west-1) is about 10-20 ms per round trip, so the count matters more than query cost.
+2. Round trips: each API call did one query for the session user, then the real queries. With the function and the database in the same region a round trip is a few milliseconds, so the count of requests from the clinic matters more than query cost. (Before the Mumbai move both were in Ireland, so every call from the clinic in Bihar also crossed to Europe.)
 3. Query cost: the app is tiny (about 10k rows, 205k medicine rows searched in the browser), so indexes are not the bottleneck. All filter/sort columns already have indexes (clinic_id + date, trigram on names).
 
 ## Done
-- Same region for function and database (dub1 / eu-west-1).
+- Same region for function and database, both in Mumbai (`bom1` pinned by `regions` in vercel.json, Supabase `ap-south-1`). Before the 2 Nov evening move both were in Ireland (dub1 / eu-west-1), which put every request from the clinic on an India-to-Ireland trip. Settings → Security → Speed check shows both regions and the time of one query.
+- "Call next patient" is one request instead of two.
 - Transaction pooler (port 6543), prepared statements off, small pool, stale-connection check.
 - Medicine catalogue searched in the browser, not the server.
 - Session user cached in memory for 20 s per function instance: one database round trip less on every request.
