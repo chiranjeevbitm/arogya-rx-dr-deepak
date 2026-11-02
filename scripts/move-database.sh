@@ -70,12 +70,12 @@ if [ -n "${SRC_SUPABASE_URL:-}" ] && [ -n "${DST_SUPABASE_URL:-}" ] && [ -n "${S
   curl -sS -o /dev/null -X POST "$DU/storage/v1/bucket" -H "apikey: $DST_SUPABASE_KEY" -H "$(auth "$DST_SUPABASE_KEY")" -H 'Content-Type: application/json' \
     -d "{\"id\":\"$BUCKET\",\"name\":\"$BUCKET\",\"public\":false,\"file_size_limit\":15728640}" || true   # already exists is fine
   OK=0; FAIL=0
-  while IFS= read -r p; do
+  while IFS=$'\t' read -r p mime; do
     [ -n "$p" ] || continue
     if curl -fsS "$SU/storage/v1/object/authenticated/$BUCKET/$p" -H "apikey: $SRC_SUPABASE_KEY" -H "$(auth "$SRC_SUPABASE_KEY")" -o "$WORK/f.bin" \
        && curl -fsS -X POST "$DU/storage/v1/object/$BUCKET/$p" -H "apikey: $DST_SUPABASE_KEY" -H "$(auth "$DST_SUPABASE_KEY")" -H 'x-upsert: true' \
-            -H "Content-Type: $(file -b --mime-type "$WORK/f.bin")" --data-binary @"$WORK/f.bin" -o /dev/null; then OK=$((OK+1)); else FAIL=$((FAIL+1)); echo "   could not copy: $p" >&2; fi
-  done < <(q "$SRC_DB_URL" "select path from arx.files where storage = 'supabase'")
+            -H "Content-Type: ${mime:-application/octet-stream}" --data-binary @"$WORK/f.bin" -o /dev/null; then OK=$((OK+1)); else FAIL=$((FAIL+1)); echo "   could not copy: $p" >&2; fi
+  done < <(q "$SRC_DB_URL" "select path || E'\\t' || mime from arx.files where storage = 'supabase'")
   echo "   copied $OK files, $FAIL failed"
   [ "$FAIL" = 0 ] || exit 1
 else

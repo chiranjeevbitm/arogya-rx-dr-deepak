@@ -1,0 +1,60 @@
+name: Move the database to a new Supabase project (one time)
+
+# Copies the clinic's data from the OLD Supabase project to the NEW one (for example Ireland -> Mumbai) with
+# scripts/move-database.sh, and checks the row counts table by table. It only READS the old project. It refuses to
+# run if the new database already has patients or prescriptions.
+#
+# Setup (GitHub -> this repository -> Settings -> Secrets and variables -> Actions -> New repository secret):
+#   SRC_DB_URL  OLD database: Supabase -> Connect -> Session pooler (port 5432), password filled in
+#   DST_DB_URL  NEW database: same, from the new project
+# Optional, to copy scans, logo and PDFs as well (Project Settings -> API -> project URL and secret key):
+#   SRC_SUPABASE_URL, SRC_SUPABASE_KEY, DST_SUPABASE_URL, DST_SUPABASE_KEY
+#
+# This repository is public, so the log of this run is public too. It shows table names and row counts only, never
+# passwords (GitHub hides secret values). Delete these secrets when the move is done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type MOVE to copy the old database into the new one'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: move-database
+  cancel-in-progress: false
+
+jobs:
+  move:
+    if: ${{ inputs.confirm == 'MOVE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets are set
+        env:
+          SRC: ${{ secrets.SRC_DB_URL }}
+          DST: ${{ secrets.DST_DB_URL }}
+        run: |
+          [ -n "$SRC" ] || { echo "::error::Add the SRC_DB_URL secret (OLD database, session pooler, port 5432)."; exit 1; }
+          [ -n "$DST" ] || { echo "::error::Add the DST_DB_URL secret (NEW database, session pooler, port 5432)."; exit 1; }
+          case "$SRC$DST" in *"[YOUR-PASSWORD]"*) echo "::error::A secret still contains [YOUR-PASSWORD]. Put the real database password in."; exit 1;; esac
+
+      - name: Copy and compare
+        env:
+          SRC_DB_URL: ${{ secrets.SRC_DB_URL }}
+          DST_DB_URL: ${{ secrets.DST_DB_URL }}
+          SRC_SUPABASE_URL: ${{ secrets.SRC_SUPABASE_URL }}
+          SRC_SUPABASE_KEY: ${{ secrets.SRC_SUPABASE_KEY }}
+          DST_SUPABASE_URL: ${{ secrets.DST_SUPABASE_URL }}
+          DST_SUPABASE_KEY: ${{ secrets.DST_SUPABASE_KEY }}
+          PG_VERSION: ${{ vars.PG_CLIENT_VERSION || '17' }}   # must be at least the Supabase Postgres version
+        run: |
+          docker run --rm \
+            -e SRC_DB_URL -e DST_DB_URL -e SRC_SUPABASE_URL -e SRC_SUPABASE_KEY -e DST_SUPABASE_URL -e DST_SUPABASE_KEY \
+            -v "$PWD:/w:ro" "postgres:${PG_VERSION}" \
+            bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq curl >/dev/null && bash /w/scripts/move-database.sh'
