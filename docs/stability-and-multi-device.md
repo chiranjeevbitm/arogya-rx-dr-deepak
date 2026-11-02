@@ -24,6 +24,23 @@ Cause: one Vercel function instance serves many requests at the same time, and t
 
 Tested locally with a proxy that silently freezes database sockets. Before: the request hung, then failed. After: the request returned 200, in 12 s when the socket froze mid-use and 2.5 s when it froze while idle.
 
+### 2b. Second cause found (13:00 IST): slow queries, not only dead connections
+
+After the first fix the logs showed "canceling statement due to statement timeout" on simple lookups, and "Could not open this prescription". The database itself was slow:
+- The OPD list, adding a token and opening a consult look up each patient's last final prescription and each visit's bill. The only index started with `clinic_id`, which these lookups do not filter on, so each one scanned the whole prescriptions table (thousands of imported rows), once per patient in the queue, on every 10 s refresh from every device.
+- Retries made it worse: the browser retried slow requests and the server retried them again, so one click could become up to 8 database requests.
+
+Fixed (commit ff1b48c):
+| Fix | Where |
+| --- | --- |
+| New indexes `prescriptions (patient_id, status, rx_date)` and `bills (visit_id)`, plus `ANALYZE` (migration 5, applied automatically on first request) | `server/migrations.ts` |
+| A slow request (12 s budget or statement timeout) returns "The database is slow to answer right now" and is not retried and does not reset connections | `server/app.ts` |
+| Browser no longer re-sends a request that timed out, and no longer repeats reads the server already retried | `src/lib/api.ts` |
+| Opening a consult loads only what the consult shows (40 latest prescriptions, labs, bills) | `server/routes/patients.ts` |
+| The migration check only treats "table missing" as a first run, so a connection error cannot start the locked migration path | `server/db.ts` |
+
+If it is still slow after this, check Supabase Dashboard → Database → Query Performance for the slowest queries, and confirm the project is not paused or out of free compute.
+
 ## 3. Multi-device use: current state
 
 One login on several devices (clinic PC, laptop, phone) at the same time was already allowed: logging in on one device does not log out another. What was missing, and is now added:
