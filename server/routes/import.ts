@@ -9,6 +9,7 @@ import { requireAuth } from '../lib/auth.js'
 import { audit } from '../lib/audit.js'
 import { createPatient } from './patients.js'
 import { detectForm, normFreq, defaultRoute } from '../../shared/rx.js'
+import { groupPatients, type RegisterRow } from '../../shared/opdRegister.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth('doctor', 'admin'))
@@ -132,6 +133,50 @@ r.post('/old', async c => {
   }
   if (b.offset === 0) await audit(c, 'import.start', 'clinic', u.clinic_id)
   return c.json({ imported, skipped, patients_created: patientsCreated, next_offset: b.offset + rows.length, done: rows.length < b.limit })
+})
+
+/** The clinic's Excel OPD register: patients and visits, with no money columns. Re-running is safe (patients are keyed by their first register serial, visits by serial). */
+const RegisterIn = z.object({ rows: z.array(z.object({
+  serial: z.number().int().min(0).max(100000), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), session: z.enum(['am', 'pm']).nullable(),
+  name: z.string().max(120), sex: z.enum(['M', 'F']).nullable(), age: z.number().int().min(0).max(125).nullable(), weight: z.number().min(0).max(300).nullable(),
+  fresh: z.boolean(), address: z.string().max(300), phone: z.string().max(10), note: z.string().max(300),
+})).min(1).max(3000) })
+
+/** Adds register rows as patients and done visits. Safe to run twice. Returns counts only. */
+export async function importRegisterRows(clinicId: string, userId: string, rows: RegisterRow[]) {
+  const groups = groupPatients(rows)
+  let patientsCreated = 0, patientsMatched = 0, visitsCreated = 0, visitsSkipped = 0
+  await sql().begin(async tx => {
+    for (const g of groups) {
+      const key = `opdreg:${g.key}`
+      let [p] = await tx`select id from arx.patients where clinic_id = ${clinicId} and legacy_key = ${key}`
+      if (!p && g.phone) [p] = await tx`select id from arx.patients where clinic_id = ${clinicId} and phone = ${g.phone} and lower(split_part(name, ' ', 1)) = ${g.name.toLowerCase().split(' ')[0]} order by created_at limit 1`
+      if (p) patientsMatched++
+      else {
+        const created = await createPatient(tx, clinicId, { name: g.name.length >= 2 ? g.name : `Unnamed patient`, sex: g.sex, age_years: g.age, phone: g.phone || null, address: g.address || null, notes: g.placeholder ? 'Name was not written in the OPD register.' : null })
+        await tx`update arx.patients set legacy_key = ${key}, created_at = ${g.visits[0].date + 'T10:00:00+05:30'} where id = ${created.id}`
+        p = created; patientsCreated++
+      }
+      for (const v of g.visits) {
+        const [dup] = await tx`select 1 from arx.visits where clinic_id = ${clinicId} and source = 'opd_register' and vitals->>'register_serial' = ${String(v.serial)}`
+        if (dup) { visitsSkipped++; continue }
+        const [{ t }] = await tx`select coalesce(max(token), 0) + 1 as t from arx.visits where clinic_id = ${clinicId} and visit_date = ${v.date}`
+        const at = `${v.date}T${v.session === 'am' ? '10:30' : v.session === 'pm' ? '17:00' : '12:00'}:00+05:30`
+        const vitals = { register_serial: String(v.serial), ...(v.session ? { session: v.session } : {}), ...(v.weight ? { weight: String(v.weight) } : {}) }
+        await tx`insert into arx.visits (clinic_id, patient_id, visit_date, token, status, visit_type, source, complaint, vitals, arrived_at, started_at, finished_at, created_by)
+          values (${clinicId}, ${p.id}, ${v.date}, ${t}, 'done', ${v.fresh ? 'new' : 'follow_up'}, 'opd_register', ${v.note || null}, ${tx.json(vitals)}, ${at}, ${at}, ${at}, ${userId})`
+        visitsCreated++
+      }
+    }
+  })
+  return { patients_created: patientsCreated, patients_matched: patientsMatched, visits_created: visitsCreated, visits_skipped: visitsSkipped }
+}
+
+r.post('/opd-register', async c => {
+  const b = await body(c, RegisterIn), u = me(c)
+  const out = await importRegisterRows(u.clinic_id, u.id, b.rows as RegisterRow[])
+  await audit(c, 'import.opd_register', 'clinic', u.clinic_id, { patients: out.patients_created, visits: out.visits_created })
+  return c.json(out)
 })
 
 export default r

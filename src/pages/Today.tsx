@@ -5,6 +5,7 @@ import { useMe } from '../lib/session'
 import { ageSex, inr, istToday } from '../lib/format'
 import { Modal, Spinner, useAsync, useLive, useToast, Field } from '../components/ui'
 import { PatientPicker, type Patient, type NewPatient } from '../components/PatientPicker'
+import { BILLING_ENABLED } from '../lib/features'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 import Icon from '../components/Icon'
@@ -62,7 +63,7 @@ export default function Today() {
       <div className="stat"><b>{S.visits.total}</b><span>patients today, {S.visits.new_visits} new</span></div>
       <div className="stat"><b>{S.visits.waiting}</b><span>waiting</span></div>
       <div className="stat"><b>{S.appointments.booked}</b><span>appointments still to come</span></div>
-      <div className="stat"><b>{inr(S.bills.collected)}</b><span>collected ({inr(S.bills.cash)} cash, {inr(S.bills.upi)} UPI)</span></div>
+      {BILLING_ENABLED && <div className="stat"><b>{inr(S.bills.collected)}</b><span>collected ({inr(S.bills.cash)} cash, {inr(S.bills.upi)} UPI)</span></div>}
     </div>}
 
     <div className="ptgrid">
@@ -87,8 +88,8 @@ export default function Today() {
               <div className="row wrap" style={{ justifyContent: 'flex-end' }}>
                 {v.status === 'waiting' && <button className="btn sm" onClick={() => setVitalsFor(v)}>Vitals</button>}
                 {v.rx_status === 'final' && <Link className="btn sm" to={`/rx/${v.rx_id}`}><Icon n="rx" />Parchi</Link>}
-                {v.bill_id ? <button className="btn sm ghost" onClick={() => setReceipt(v.bill_id)}><span className="tag green">{v.bill_mode === 'due' ? 'Unpaid' : inr(v.bill_paid)}</span></button>
-                  : v.status !== 'cancelled' && <button className="btn sm" onClick={() => setBillFor(v)}><Icon n="rupee" />Bill</button>}
+                {BILLING_ENABLED && (v.bill_id ? <button className="btn sm ghost" onClick={() => setReceipt(v.bill_id)}><span className="tag green">{v.bill_mode === 'due' ? 'Unpaid' : inr(v.bill_paid)}</span></button>
+                  : v.status !== 'cancelled' && <button className="btn sm" onClick={() => setBillFor(v)}><Icon n="rupee" />Bill</button>)}
                 {v.status === 'waiting' && <button className="icon-btn" title="Patient left" aria-label="Mark as left" onClick={() => setStatus(v, 'cancelled')}><Icon n="x" /></button>}
               </div>
             </div>

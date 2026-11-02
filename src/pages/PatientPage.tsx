@@ -8,6 +8,7 @@ import Icon from '../components/Icon'
 import TrendChart from '../components/TrendChart'
 import { EditPatient } from './Consult'
 import { ScanDialog } from '../components/AiDialogs'
+import { BILLING_ENABLED } from '../lib/features'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 
@@ -59,9 +60,9 @@ export default function PatientPage({ id: pid }: { id?: string }) {
         </section>
         {documents.length > 0 && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2>Scanned documents</h2></div>
           <div className="list">{documents.map((x: any) => <a key={x.id} className="li" href={x.file_id ? fileUrl(x.file_id) : undefined} target="_blank" rel="noreferrer"><Icon n="file" /><span className="grow"><b>{x.kind === 'lab_report' ? 'Lab report' : x.kind === 'old_rx' ? 'Old prescription' : 'Document'}</b> {x.extracted?.source_name}<br /><span className="small muted">{x.doc_date ? fmtDate(d10(x.doc_date)) : fmtDate(d10(x.created_at))}{x.extracted?.labs?.length ? `, ${x.extracted.labs.length} values` : ''}</span></span></a>)}</div></section>}
-        <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2 className="grow">Bills</h2><button className="btn sm" onClick={() => setBill(true)}><Icon n="plus" />Bill</button></div>
+        {BILLING_ENABLED && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2 className="grow">Bills</h2><button className="btn sm" onClick={() => setBill(true)}><Icon n="plus" />Bill</button></div>
           {bills.length === 0 ? <div className="empty small">No bills.</div> : <div className="list">{bills.map((x: any) => <button key={x.id} className="li" onClick={() => setReceipt(x.id)}><span className="grow">#{x.bill_no}, {fmtDate(d10(x.bill_date))}</span><span className={'tag ' + (x.status === 'void' ? '' : x.status === 'due' ? 'amber' : 'green')}>{x.status === 'void' ? 'Cancelled' : x.status === 'due' ? 'Unpaid' : inr(x.paid)}</span></button>)}</div>}
-        </section>
+        </section>}
         {visits.length > 0 && <p className="small faint">{visits.length} clinic visit{visits.length > 1 ? 's' : ''} since {fmtDate(d10(visits[visits.length - 1].visit_date))}.</p>}
       </aside>
     </div>

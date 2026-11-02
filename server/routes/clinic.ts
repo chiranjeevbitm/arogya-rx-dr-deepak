@@ -78,6 +78,39 @@ r.get('/audit', requireAuth('doctor', 'admin'), async c => {
     from arx.audit_log a left join arx.users u on u.id = a.user_id where a.clinic_id = ${me(c).clinic_id} order by a.at desc limit 200`)
 })
 
+/** OPD dashboard: visits and patients by month (last 12 months), and a breakdown of one month. No money figures. */
+r.get('/dashboard', requireAuth('doctor', 'admin'), async c => {
+  const cid = me(c).clinic_id, db = sql()
+  const month = /^\d{4}-\d{2}$/.test(c.req.query('month') || '') ? c.req.query('month')! : null
+  if (!month) {
+    const [series, firsts, rx, totals] = await Promise.all([
+      db`select to_char(visit_date, 'YYYY-MM') as m, count(*)::int as visits,
+           count(*) filter (where visit_type = 'new')::int as new_visits, count(*) filter (where visit_type <> 'new')::int as repeat_visits,
+           count(distinct patient_id)::int as patients, count(distinct visit_date)::int as days
+         from arx.visits where clinic_id = ${cid} and status <> 'cancelled' and visit_date >= (date_trunc('month', (now() at time zone 'Asia/Kolkata')::date) - interval '11 months')::date
+         group by 1 order by 1`,
+      db`select to_char(d, 'YYYY-MM') as m, count(*)::int as n from (select patient_id, min(visit_date) as d from arx.visits where clinic_id = ${cid} and status <> 'cancelled' group by 1) x group by 1`,
+      db`select to_char(rx_date, 'YYYY-MM') as m, count(*)::int as n from arx.prescriptions where clinic_id = ${cid} and status = 'final' group by 1`,
+      db`select (select count(*)::int from arx.patients where clinic_id = ${cid}) as patients, (select count(*)::int from arx.visits where clinic_id = ${cid} and status <> 'cancelled') as visits,
+           (select min(visit_date) from arx.visits where clinic_id = ${cid} and status <> 'cancelled') as since`,
+    ])
+    const fm = new Map(firsts.map(x => [x.m, x.n])), rm = new Map(rx.map(x => [x.m, x.n]))
+    return c.json({ months: series.map(x => ({ ...x, new_patients: fm.get(x.m) ?? 0, prescriptions: rm.get(x.m) ?? 0 })), totals: totals[0] })
+  }
+  const from = `${month}-01`
+  const base = db`from arx.visits v join arx.patients p on p.id = v.patient_id where v.clinic_id = ${cid} and v.status <> 'cancelled' and v.visit_date >= ${from}::date and v.visit_date < (${from}::date + interval '1 month')`
+  const [daily, sex, age, places, session, weekday, dx] = await Promise.all([
+    db`select to_char(v.visit_date, 'YYYY-MM-DD') as d, count(*)::int as n, count(*) filter (where v.visit_type = 'new')::int as new_n ${base} group by 1 order by 1`,
+    db`select coalesce(p.sex, '?') as k, count(*)::int as n ${base} group by 1`,
+    db`select case when p.age_years is null then 'Not noted' when p.age_years <= 12 then '0-12' when p.age_years <= 30 then '13-30' when p.age_years <= 45 then '31-45' when p.age_years <= 60 then '46-60' else '60+' end as k, count(*)::int as n ${base} group by 1`,
+    db`select initcap(lower(btrim(p.address))) as k, count(*)::int as n ${base} and coalesce(btrim(p.address), '') <> '' group by 1 order by 2 desc, 1 limit 8`,
+    db`select coalesce(v.vitals->>'session', case when v.source = 'opd_register' then '?' when extract(hour from v.arrived_at at time zone 'Asia/Kolkata') < 14 then 'am' else 'pm' end) as k, count(*)::int as n ${base} group by 1`,
+    db`select extract(isodow from v.visit_date)::int as k, count(*)::int as n ${base} group by 1`,
+    db`select lower(btrim(r.data->>'diagnosis')) as k, count(*)::int as n from arx.prescriptions r where r.clinic_id = ${cid} and r.status = 'final' and r.rx_date >= ${from}::date and r.rx_date < (${from}::date + interval '1 month') and coalesce(btrim(r.data->>'diagnosis'), '') <> '' group by 1 order by 2 desc, 1 limit 6`,
+  ])
+  return c.json({ month, daily, sex, age, places, session, weekday, diagnoses: dx })
+})
+
 /** Where the server and the database run, how long one query takes, and how many records exist.
     Used by Settings → Security → Speed check to confirm the Mumbai move and to compare counts after a restore. */
 r.get('/system', requireAuth('doctor', 'admin'), async c => {

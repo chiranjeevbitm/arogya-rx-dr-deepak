@@ -90,6 +90,24 @@ r = await call('POST', '/api/public/clinic/arogya-clinic/book', { name: 'Bot', p
 r = await call('GET', `/api/appointments?from=${tomorrow}&to=${tomorrow}`, null, 'reception'); const ap = r.j.find(a => a.name === 'Kavita Sharma'); ok(ap?.source === 'online' && !r.j.some(a => a.name === 'Bot'), 'online booking visible to reception, bot ignored', r.j)
 
 // import from old app
+// ---- OPD register import (synthetic rows) and dashboard
+{
+  const R = (serial, date, name, o = {}) => ({ serial, date, session: 'am', name, sex: 'F', age: 40, weight: null, fresh: true, address: 'Testpur', phone: '', note: '', ...o })
+  const rows = [R(9001, '2026-03-02', 'Test Alpha', { phone: '9000011111' }), R(9002, '2026-03-09', 'Test Alpha', { phone: '9000011111', fresh: false, session: 'pm', weight: 61.5, note: 'L,bp' }),
+    R(9003, '2026-03-09', 'Test Beta', { sex: 'M', age: 8 }), R(9004, '2026-04-01', 'Test Beta', { sex: 'M', age: 8, fresh: false }), R(9005, '2026-04-01', 'B', { sex: 'M' })]
+  r = await call('POST', '/api/import/opd-register', { rows }, 'doctor')
+  ok(r.status === 200 && r.j.patients_created === 3 && r.j.visits_created === 5, 'register import: 3 patients, 5 visits (repeat visits join the same patient)', r)
+  r = await call('POST', '/api/import/opd-register', { rows }, 'doctor')
+  ok(r.status === 200 && r.j.patients_created === 0 && r.j.visits_created === 0 && r.j.visits_skipped === 5, 'register import again changes nothing', r)
+  r = await call('POST', '/api/import/opd-register', { rows }, 'reception'); ok(r.status === 403, 'reception cannot import the register', r)
+  r = await call('GET', '/api/clinic/dashboard', null, 'doctor')
+  const mar = r.j.months?.find(m => m.m === '2026-03'), apr = r.j.months?.find(m => m.m === '2026-04')
+  ok(r.status === 200 && mar?.visits === 3 && mar?.new_visits === 2 && mar?.repeat_visits === 1 && mar?.patients === 2 && apr?.visits === 2, 'dashboard months add up', r.j)
+  ok(r.j.totals?.visits >= 5 && !JSON.stringify(r.j).match(/fee|paid|amount|rupee/i), 'dashboard has counts and no money fields', r.j.totals)
+  r = await call('GET', '/api/clinic/dashboard?month=2026-03', null, 'doctor')
+  ok(r.status === 200 && r.j.daily?.length === 2 && r.j.session?.some(x => x.k === 'pm' && x.n === 1) && r.j.places?.[0]?.k === 'Testpur', 'dashboard month detail', r.j)
+  r = await call('GET', '/api/clinic/dashboard', null, 'reception'); ok(r.status === 403, 'reception cannot open the dashboard data', r)
+}
 r = await call('GET', '/api/import/old/status', null, 'doctor'); ok(r.j.old_prescriptions === 3, 'old DB reachable: 3 prescriptions', r)
 r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 3 && r.j.patients_created === 2 && r.j.done, 'import: 3 prescriptions, 2 patients (Ramesh deduped by OP no)', r.j)
 r = await call('POST', '/api/import/old', { offset: 0, limit: 150 }, 'doctor'); ok(r.j.imported === 0 && r.j.skipped === 3, 're-running import is safe', r.j)

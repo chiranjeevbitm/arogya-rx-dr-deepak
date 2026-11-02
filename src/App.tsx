@@ -12,6 +12,7 @@ const Opd = lazy(() => import('./pages/Opd'))
 const Patients = lazy(() => import('./pages/Patients'))
 const RxView = lazy(() => import('./pages/RxView'))
 const Appointments = lazy(() => import('./pages/Appointments'))
+import { BILLING_ENABLED } from './lib/features'
 const Billing = lazy(() => import('./pages/Billing'))
 const Settings = lazy(() => import('./pages/Settings'))
 
@@ -35,7 +36,7 @@ export default function App() {
         <Route path="/rx/:id" element={<RxView />} />
         <Route path="/schedule" element={<Appointments />} />
         <Route path="/appointments" element={<Navigate to="/schedule" replace />} />
-        <Route path="/billing" element={<Billing />} />
+        <Route path="/billing" element={BILLING_ENABLED ? <Billing /> : <Navigate to="/opd" replace />} />
         <Route path="/settings/*" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -51,14 +52,14 @@ function Shell({ children }: { children: React.ReactNode }) {
     { to: '/opd', n: 'rx', label: 'OPD & Rx', tab: true },
     { to: '/patients', n: 'users', label: 'Patients', tab: true },
     { to: '/schedule', n: 'cal', label: 'Schedule', tab: true },
-    { to: '/billing', n: 'rupee', label: 'Billing', tab: true },
+    ...(BILLING_ENABLED ? [{ to: '/billing', n: 'rupee', label: 'Billing', tab: true }] : []),
     { to: '/settings', n: 'gear', label: 'Settings', tab: false },
   ]
   const [slim, setSlim] = useState(() => { try { return localStorage.getItem('arx.rail') === '1' } catch { return false } })
   const toggle = () => setSlim(s => { const v = !s; try { localStorage.setItem('arx.rail', v ? '1' : '0') } catch { /* private mode */ } return v })
   // warm up the other screens and the medicine list while the doctor is busy, so every click after is instant
   useEffect(() => {
-    const warm = () => { import('./pages/Opd'); import('./pages/Patients'); import('./pages/Appointments'); import('./pages/Billing'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
+    const warm = () => { import('./pages/Opd'); import('./pages/Patients'); import('./pages/Appointments'); if (BILLING_ENABLED) import('./pages/Billing'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
     const ric = (window as any).requestIdleCallback as undefined | ((f: () => void, o?: any) => number)
     if (ric) ric(warm, { timeout: 3000 }); else setTimeout(warm, 1500)
   }, [])

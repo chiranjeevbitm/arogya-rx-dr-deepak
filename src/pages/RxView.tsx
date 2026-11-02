@@ -7,6 +7,7 @@ import { Spinner, useToast, useDialog } from '../components/ui'
 import Icon from '../components/Icon'
 import { ParchiPreview } from '../components/Parchi'
 import { PrintArea, printOnly, WhatsAppPreview } from '../components/RxActions'
+import { BILLING_ENABLED } from '../lib/features'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
 import { elementToPdf, blobToBase64 } from '../lib/pdf'
@@ -73,7 +74,7 @@ export default function RxView() {
           <button className="btn lg good" onClick={() => setWa(true)} disabled={pdfBusy}><Icon n="wa" />WhatsApp</button>
           <button className="btn" onClick={download}><Icon n="down" />Download PDF</button>
           {!p.phone && <p className="small muted">No mobile number on file, so WhatsApp is not available.</p>}
-          {b.visit && (billed ? <button className="btn" onClick={() => setReceipt(billed)}><Icon n="receipt" />View receipt</button> : <button className="btn" onClick={() => setBilling(true)}><Icon n="rupee" />Make bill</button>)}
+          {BILLING_ENABLED && b.visit && (billed ? <button className="btn" onClick={() => setReceipt(billed)}><Icon n="receipt" />View receipt</button> : <button className="btn" onClick={() => setBilling(true)}><Icon n="rupee" />Make bill</button>)}
         </div>}
         {isDoc && <div className="card stack">
           {isNew && <button className="btn primary" onClick={next}><Icon n="next" />Call next patient</button>}

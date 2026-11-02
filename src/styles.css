@@ -387,3 +387,63 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .star { width: 28px; height: 28px; font-size: 17px; line-height: 1; color: var(--faint) }
 .star.on { color: #C98A00 }
 .tag.valid { background: #E4F4EA; color: #14633A }
+
+/* ---------- OPD dashboard ---------- */
+.dash { display: flex; flex-direction: column; gap: 14px }
+.dash-h { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; justify-content: space-between }
+.dash-h h2 { margin: 0 }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px }
+.kpi { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; animation: dash-rise .5s both }
+.kpi:nth-child(2) { animation-delay: .06s } .kpi:nth-child(3) { animation-delay: .12s } .kpi:nth-child(4) { animation-delay: .18s } .kpi:nth-child(5) { animation-delay: .24s }
+.kpi span { font-size: 12.5px; color: var(--muted); font-weight: 600 }
+.kpi b { font: 800 28px/1.1 var(--f-head); color: var(--ink-deep); font-variant-numeric: tabular-nums }
+.kpi em { font-style: normal; font-size: 12.5px; color: var(--muted) }
+.kpi em.up { color: var(--neem); font-weight: 600 } .kpi em.down { color: var(--sindoor); font-weight: 600 }
+.dgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
+.dcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px; min-width: 0; animation: dash-rise .55s both }
+.dcard.wide { grid-column: 1 / -1 }
+.dcard-h { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap }
+.dcard-h h3 { margin: 0; font: 700 15.5px/1.2 var(--f-head) }
+@keyframes dash-rise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+.chart-wrap { position: relative }
+.chart { width: 100%; height: auto; display: block; overflow: visible }
+.chart .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4 }
+.chart .axis { fill: var(--muted); font: 600 11px var(--f-ui, system-ui) }
+.chart .axis.mlab.on { fill: var(--ink-deep); font-weight: 800 }
+.chart .val { fill: var(--text); font: 700 11px var(--f-ui, system-ui) }
+.chart .hit { fill: transparent; cursor: pointer }
+.chart .bar { cursor: pointer; outline: none }
+.chart .bar rect.b-new { fill: var(--ink) } .chart .bar rect.b-rep { fill: #8F9BEA } .chart .bar rect.b-one { fill: var(--ink) }
+.chart .bar { transition: opacity .2s, filter .2s } .chart:hover .bar:not(.hov) { opacity: .55 }
+.chart .bar.sel rect.b-new, .chart .bar.sel rect.b-one { fill: var(--neem) } .chart .bar.sel rect.b-rep { fill: #7BC49C }
+.chart .bar:focus-visible .hit { stroke: var(--ink); stroke-width: 2; rx: 6 }
+.chart .ln { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round }
+.chart .area { fill: var(--ink-soft) }
+.chart .dot { fill: var(--paper); stroke: var(--ink); stroke-width: 2 }
+.chart .cross { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3 }
+.tip { position: absolute; top: 0; transform: translate(-50%, -4px); background: var(--ink-deep); color: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; line-height: 1.4; pointer-events: none; white-space: nowrap; display: flex; flex-direction: column; box-shadow: 0 6px 18px rgba(14, 26, 110, .25); animation: dash-rise .15s both; z-index: 2 }
+.tip b { font-size: 12.5px }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 4px; flex-wrap: wrap }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block } .legend i + i, .legend i:not(:first-child) { margin-left: 8px }
+.lg-new, .lg-one { background: var(--ink) } .lg-rep { background: #8F9BEA }
+.donut-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap }
+.donut { width: 150px; height: 150px; flex: none }
+.donut .d-bg { fill: none; stroke: var(--desk); stroke-width: 13 }
+.donut .d-num { font: 800 22px var(--f-head); fill: var(--ink-deep) } .donut .d-lab { font: 600 8.5px var(--f-ui, system-ui); fill: var(--muted) }
+.d-leg { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px }
+.d-leg li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 3px 6px; border-radius: 7px; transition: background .15s }
+.d-leg li.on { background: var(--desk) } .d-leg li i { width: 10px; height: 10px; border-radius: 50%; flex: none } .d-leg li b { margin-left: auto; font-variant-numeric: tabular-nums } .d-leg li small { color: var(--muted); width: 34px; text-align: right }
+.hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
+.hbars li { display: grid; grid-template-columns: minmax(70px, 38%) 1fr 28px; gap: 8px; align-items: center; font-size: 13.5px }
+.hb-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.hb-t { height: 12px; background: var(--desk); border-radius: 99px; overflow: hidden }
+.hb-f { display: block; height: 100%; border-radius: 99px; transition: width .8s cubic-bezier(.2,.9,.2,1) }
+.hbars b { text-align: right; font-variant-numeric: tabular-nums }
+.wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 150px }
+.wk-c { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; border-radius: 8px; padding: 2px; transition: background .15s }
+.wk-c.on { background: var(--desk) } .wk-c b { font-size: 12px; font-variant-numeric: tabular-nums } .wk-c small { color: var(--muted); font-size: 11.5px }
+.wk-bar { width: 100%; max-width: 34px; flex: 1; display: flex; align-items: flex-end; background: var(--desk); border-radius: 7px; overflow: hidden }
+.wk-bar > span { display: block; width: 100%; background: var(--ink); border-radius: 7px; transition: height .8s cubic-bezier(.2,.9,.2,1) }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } .dgrid { grid-template-columns: 1fr } }
+@media (prefers-reduced-motion: reduce) { .kpi, .dcard, .tip { animation: none } .chart *, .hb-f, .wk-bar > span { transition: none !important } .chart .ln { stroke-dashoffset: 0 !important } }
