@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex, fmtDate, inr, d10 } from '../lib/format'
-import { Modal, Spinner, TagInput, useToast, Field } from '../components/ui'
+import { Modal, Spinner, TagInput, useToast, useDialog, Field } from '../components/ui'
 import Icon from '../components/Icon'
 import MedSearch, { medFromHit } from '../components/MedSearch'
 import { ParchiPreview, type RxData } from '../components/Parchi'
@@ -21,7 +21,7 @@ function fmtT(sec: number) { sec = Math.max(0, Math.round(sec)); return Math.flo
 
 /** The consult: centre column of OPD & Rx, with the live parchi in `side`. */
 export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { rxId: string; onChanged: () => void; onNext: () => void; renderSide: (el: React.ReactNode) => React.ReactNode }) {
-  const me = useMe(), toast = useToast()
+  const me = useMe(), toast = useToast(), dlg = useDialog()
   const [b, setB] = useState<Bundle | null>(null), [err, setErr] = useState('')
   const [data, setData] = useState<RxData>({}), [meds, setMeds] = useState<Med[]>([])
   const [saved, setSaved] = useState<'saved' | 'dirty' | 'saving'>('saved')
@@ -45,14 +45,16 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
 
   const final = b?.rx.status === 'final'
+  const finalizing = useRef(false)   // a save-and-finish is under way: the draft autosave must stay out of its way
   // autosave drafts
   useEffect(() => {
     if (!b || final) return
     if (first.current) { first.current = false; return }
     setSaved('dirty')
     const t = setTimeout(async () => {
+      if (finalizing.current) return
       setSaved('saving')
-      try { await api(`/rx/${rxId}`, { method: 'PUT', body: { data, meds } }); setSaved('saved') } catch (e: any) { setSaved('dirty'); if (e instanceof ApiError && e.status !== 0) toast(e.message, 'err') }
+      try { await api(`/rx/${rxId}`, { method: 'PUT', body: { data, meds } }); setSaved('saved') } catch (e: any) { setSaved('dirty'); if (e instanceof ApiError && e.status !== 0 && e.status !== 409) toast(e.message, 'err') }
     }, 900)
     return () => clearTimeout(t)
   }, [data, meds]) // eslint-disable-line
@@ -84,15 +86,16 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   }
   const saveAsTemplate = async () => {
     if (!meds.length && !data.diagnosis) return toast('Add a diagnosis or medicines first.', 'err')
-    const name = (prompt('Name for this template (e.g. Diabetes follow-up):', data.diagnosis || '') || '').trim()
+    const name = ((await dlg.prompt('Save as a template', { text: 'Name for this template, e.g. Diabetes follow-up.', value: data.diagnosis || '', ok: 'Save template' })) || '').trim()
     if (name.length < 2) return
     try {
       await api('/templates', { body: { name, data: { diagnosis: data.diagnosis || '', meds, investigations: data.investigations || [], advice: data.advice || [], follow_up_days: data.follow_up?.days || null } } })
       setTemplates(await api<Template[]>('/templates')); toast(`Template "${name}" saved. It is on the list above.`, 'ok')
     } catch (e: any) { toast(e.message, 'err') }
   }
-  const applyTemplate = (t: Template) => {
-    const merge = meds.length > 0 && !confirm(`Replace the ${meds.length} medicine(s) already added with "${t.name}"?\nOK = replace, Cancel = add to them.`)
+  const applyTemplate = async (t: Template) => {
+    let merge = false
+    if (meds.length > 0) { const a = await dlg.ask(`Use "${t.name}"?`, { text: `${meds.length} medicine(s) are already on this prescription.`, ok: 'Replace them', alt: 'Add to them' }); if (!a) return; merge = a === 'alt' }
     setMeds(merge ? [...meds, ...t.data.meds.filter(m => !meds.some(x => x.name === m.name))] : t.data.meds.map(m => ({ ...m })))
     setData(d => ({ ...d, diagnosis: d.diagnosis && merge ? d.diagnosis + ', ' + t.data.diagnosis : t.data.diagnosis, investigations: [...new Set([...(d.investigations || []), ...t.data.investigations])], advice: [...new Set([...(d.advice || []), ...t.data.advice])], follow_up: t.data.follow_up_days ? { ...(d.follow_up || {}), days: t.data.follow_up_days } : d.follow_up }))
     toast(`${t.name}: ${t.data.meds.length} medicines, tests and advice filled`, 'ok')
@@ -102,16 +105,16 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   /** Finalise (if still a draft), then run the follow-up action. */
   const finalizeThen = async (then: () => void, overrideAlerts = false) => {
     if (final) return then()
-    setBusy(true)
+    setBusy(true); finalizing.current = true
     try {
       await api(`/rx/${rxId}/finalize`, { body: { data: { ...data, cost: cost.known ? { branded: cost.branded, jan: cost.jan, save: cost.save } : undefined }, meds, override_alerts: overrideAlerts } })
       setSaved('saved'); setOverride(null); out.reset()
       setB(x => x && { ...x, rx: { ...x.rx, status: 'final', pdf_file_id: null } })
       onChanged()
       setTimeout(() => { out.ensurePdf(); then() }, 350)
-    } catch (e: any) { if (e.code === 'SAFETY') setOverride({ msg: e.message, then }); else toast(e.message, 'err') } finally { setBusy(false) }
+    } catch (e: any) { if (e.code === 'SAFETY') setOverride({ msg: e.message, then }); else toast(e.message, 'err') } finally { setBusy(false); finalizing.current = false }
   }
-  const reopen = async () => { if (!confirm('Reopen this prescription to edit it? The change is recorded in the activity log.')) return; try { await api(`/rx/${rxId}/reopen`, { method: 'POST' }); await load(); onChanged() } catch (e: any) { toast(e.message, 'err') } }
+  const reopen = async () => { if (!(await dlg.ask('Reopen this prescription?', { text: 'The change is recorded in the activity log.', ok: 'Reopen' }))) return; try { await api(`/rx/${rxId}/reopen`, { method: 'POST' }); await load(); onChanged() } catch (e: any) { toast(e.message, 'err') } }
 
   if (err) return <div className="empty"><b>Could not open this prescription</b>{err}</div>
   if (!b) return <><div className="opd-main"><Spinner /></div>{renderSide(null)}</>

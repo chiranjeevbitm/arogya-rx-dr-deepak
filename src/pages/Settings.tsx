@@ -4,7 +4,7 @@ import { api, fileUrl } from '../lib/api'
 import { useMe, useSession } from '../lib/session'
 import { compressImage } from '../lib/media'
 import { fmtDate, timeAgo, istToday, d10 } from '../lib/format'
-import { Modal, Spinner, useAsync, useToast, Field, TagInput } from '../components/ui'
+import { Modal, Spinner, useAsync, useToast, useDialog, Field, TagInput } from '../components/ui'
 import Icon from '../components/Icon'
 import { ParchiPreview } from '../components/Parchi'
 import MedSearch from '../components/MedSearch'
@@ -126,7 +126,7 @@ function ClinicTab() {
 }
 
 function Staff() {
-  const toast = useToast(), me = useMe()
+  const toast = useToast(), me = useMe(), dlg = useDialog()
   const list = useAsync(() => api<any[]>('/clinic/staff'), [])
   const [add, setAdd] = useState(false), [f, setF] = useState({ name: '', phone: '', role: 'reception', password: '' })
   const create = async () => { try { await api('/clinic/staff', { body: f }); toast(`${f.name} can now log in`, 'ok'); setAdd(false); setF({ name: '', phone: '', role: 'reception', password: '' }); list.reload() } catch (e: any) { toast(e.message, 'err') } }
@@ -138,7 +138,7 @@ function Staff() {
       <span className="grow"><b>{u.name}</b>{u.id === me.user.id && <span className="tag" style={{ marginLeft: 6 }}>You</span>}<br /><span className="small muted">{u.phone}, {u.role === 'doctor' ? 'Doctor' : u.role === 'reception' ? 'Reception' : 'Admin'}{u.last_login_at ? `, last login ${timeAgo(u.last_login_at)}` : ', never logged in'}</span></span>
       {!u.active && <span className="tag">Turned off</span>}
       {u.id !== me.user.id && <span className="row">
-        <button className="btn sm" onClick={() => { const p = prompt(`New password for ${u.name} (at least 8 characters):`); if (p) patch(u, { password: p }, 'Password reset. They are logged out everywhere.') }}>Reset password</button>
+        <button className="btn sm" onClick={async () => { const p = await dlg.prompt(`New password for ${u.name}`, { text: 'At least 8 characters. They are logged out everywhere.', ok: 'Reset password' }); if (p && p.length >= 8) patch(u, { password: p }, 'Password reset. They are logged out everywhere.'); else if (p) toast('Use at least 8 characters.', 'err') }}>Reset password</button>
         <button className="btn sm ghost" onClick={() => patch(u, { active: !u.active }, u.active ? 'Login turned off' : 'Login turned on')}>{u.active ? 'Turn off' : 'Turn on'}</button>
       </span>}
     </div>)}</div></div>
@@ -153,12 +153,12 @@ function Staff() {
 }
 
 function Templates() {
-  const toast = useToast()
+  const toast = useToast(), dlg = useDialog()
   const list = useAsync(() => api<any[]>('/templates'), [])
   const [ed, setEd] = useState<any | null>(null)
   const save = async () => { try { if (ed.id) await api(`/templates/${ed.id}`, { method: 'PUT', body: { name: ed.name, data: ed.data } }); else await api('/templates', { body: { name: ed.name, data: ed.data } }); toast('Template saved', 'ok'); setEd(null); list.reload() } catch (e: any) { toast(e.message, 'err') } }
   const restore = async () => { try { const r = await api<{ added: number }>('/templates/restore-defaults', { method: 'POST' }); toast(r.added ? `Added ${r.added} standard templates` : 'You already have all the standard templates', 'ok'); list.reload() } catch (e: any) { toast(e.message, 'err') } }
-  const del = async (t: any) => { if (!confirm(`Delete the "${t.name}" template?`)) return; await api(`/templates/${t.id}`, { method: 'DELETE' }); list.reload() }
+  const del = async (t: any) => { if (!(await dlg.ask(`Delete the "${t.name}" template?`, { ok: 'Delete', danger: true }))) return; await api(`/templates/${t.id}`, { method: 'DELETE' }); list.reload() }
   return <div className="stack" style={{ maxWidth: 820 }}>
     <div className="row wrap"><p className="muted grow">One tap on a template fills the diagnosis, medicines, tests, advice and follow-up. Change only what differs for the patient.</p><button className="btn" onClick={restore}>Add standard templates</button><button className="btn primary" onClick={() => setEd({ name: '', data: { diagnosis: '', meds: [], investigations: [], advice: [], follow_up_days: null } })}><Icon n="plus" />New template</button></div>
     <div className="card flush"><div className="list">{(list.data || []).map(t => <div key={t.id} className="li" style={{ alignItems: 'flex-start' }}>

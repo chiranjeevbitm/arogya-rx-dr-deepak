@@ -3,7 +3,7 @@ export class ApiError extends Error { constructor(public status: number, message
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
   const method = opts.method || (opts.body ? 'POST' : 'GET')
   // AI reading and imports legitimately take 10-50 s; everything else is cut at 15 s
-  const limit = opts.timeoutMs ?? (/^\/(ai|import|setup)\b/.test(path) ? 70000 : 15000)
+  const limit = opts.timeoutMs ?? (/^\/(ai|ask|import|setup)\b/.test(path) ? 70000 : 15000)
   let r: Response | undefined, lastErr: any
   // a request that hangs (a sleeping server or a dropped connection) is cut at 15 s (see limit); reads are retried once on a fresh connection
   for (let attempt = 0; attempt < (method === 'GET' ? 2 : 1); attempt++) {

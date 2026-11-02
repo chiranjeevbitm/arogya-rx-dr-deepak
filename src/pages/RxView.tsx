@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { ageSex, fmtDate, d10 } from '../lib/format'
-import { Spinner, useToast } from '../components/ui'
+import { Spinner, useToast, useDialog } from '../components/ui'
 import Icon from '../components/Icon'
 import { ParchiPreview } from '../components/Parchi'
 import { PrintArea, printOnly, WhatsAppPreview } from '../components/RxActions'
@@ -12,7 +12,7 @@ import { ReceiptDialog } from '../components/Receipt'
 import { elementToPdf, blobToBase64 } from '../lib/pdf'
 
 export default function RxView() {
-  const { id } = useParams(), [sp] = useSearchParams(), me = useMe(), toast = useToast(), nav = useNavigate()
+  const { id } = useParams(), [sp] = useSearchParams(), me = useMe(), toast = useToast(), nav = useNavigate(), dlg = useDialog()
   const [b, setB] = useState<any>(null), [err, setErr] = useState('')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null), [pdfBusy, setPdfBusy] = useState(false), [wa, setWa] = useState(false), [billing, setBilling] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [billed, setBilled] = useState<string | null>(null)
   const page = useRef<HTMLDivElement>(null)
@@ -54,7 +54,7 @@ export default function RxView() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Parchi-${p.name.replace(/\W+/g, '_')}-${d10(b.rx.rx_date)}.pdf`; a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 4000)
   }
-  const reopen = async () => { if (!confirm('Reopen this prescription to edit it? The change is recorded in the audit log.')) return; try { await api(`/rx/${id}/reopen`, { method: 'POST' }); nav(`/opd/${id}`) } catch (e: any) { toast(e.message, 'err') } }
+  const reopen = async () => { if (!(await dlg.ask('Reopen this prescription?', { text: 'The change is recorded in the audit log.', ok: 'Reopen' }))) return; try { await api(`/rx/${id}/reopen`, { method: 'POST' }); nav(`/opd/${id}`) } catch (e: any) { toast(e.message, 'err') } }
   const copyNew = async () => { try { const r = await api<{ rx_id: string }>('/rx', { body: { patient_id: p.id, copy_from: id } }); nav(`/opd/${r.rx_id}`) } catch (e: any) { toast(e.message, 'err') } }
   const next = async () => { try { const r = await api<{ visit_id: string }>('/visits/next', { method: 'POST' }); const s = await api<{ rx_id: string }>(`/visits/${r.visit_id}/start`, { method: 'POST' }); nav(`/opd/${s.rx_id}`) } catch (e: any) { toast(e.message, 'err') } }
 

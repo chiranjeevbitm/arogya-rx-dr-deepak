@@ -8,9 +8,7 @@ import Login from './pages/Login'
 import Setup from './pages/Setup'
 import Book from './pages/Book'
 
-const Home = lazy(() => import('./pages/Home'))
 const Opd = lazy(() => import('./pages/Opd'))
-const Intake = lazy(() => import('./pages/Intake'))
 const Patients = lazy(() => import('./pages/Patients'))
 const RxView = lazy(() => import('./pages/RxView'))
 const Appointments = lazy(() => import('./pages/Appointments'))
@@ -27,11 +25,11 @@ export default function App() {
   return <Shell>
     <Suspense fallback={<Spinner />}>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Navigate to="/opd" replace />} />
         <Route path="/opd" element={<Opd />} />
         <Route path="/opd/:rxId" element={<Opd />} />
         <Route path="/consult/:rxId" element={<RedirectConsult />} />
-        <Route path="/intake" element={<Intake />} />
+        <Route path="/intake" element={<Navigate to="/schedule" replace />} />
         <Route path="/patients" element={<Patients />} />
         <Route path="/patients/:id" element={<Patients />} />
         <Route path="/rx/:id" element={<RxView />} />
@@ -48,12 +46,11 @@ export default function App() {
 function Shell({ children }: { children: React.ReactNode }) {
   const me = useMe()
   const L = me.clinic.settings.letterhead
+  // four everyday screens plus Settings; Home, Intake and the old "Ask" box now live inside them
   const nav = [
-    { to: '/', n: 'home', label: 'Home', tab: true },
-    { to: '/schedule', n: 'cal', label: 'Schedule', tab: true },
-    { to: '/intake', n: 'inbox', label: 'Intake', tab: false },
     { to: '/opd', n: 'rx', label: 'OPD & Rx', tab: true },
     { to: '/patients', n: 'users', label: 'Patients', tab: true },
+    { to: '/schedule', n: 'cal', label: 'Schedule', tab: true },
     { to: '/billing', n: 'rupee', label: 'Billing', tab: true },
     { to: '/settings', n: 'gear', label: 'Settings', tab: false },
   ]
@@ -61,7 +58,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const toggle = () => setSlim(s => { const v = !s; try { localStorage.setItem('arx.rail', v ? '1' : '0') } catch { /* private mode */ } return v })
   // warm up the other screens and the medicine list while the doctor is busy, so every click after is instant
   useEffect(() => {
-    const warm = () => { import('./pages/Opd'); import('./pages/Patients'); import('./pages/Appointments'); import('./pages/Billing'); import('./pages/Intake'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
+    const warm = () => { import('./pages/Opd'); import('./pages/Patients'); import('./pages/Appointments'); import('./pages/Billing'); import('./pages/RxView'); import('./lib/medcat').then(m => m.loadCatalogue()).catch(() => {}) }
     const ric = (window as any).requestIdleCallback as undefined | ((f: () => void, o?: any) => number)
     if (ric) ric(warm, { timeout: 3000 }); else setTimeout(warm, 1500)
   }, [])
@@ -69,7 +66,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className={'shell' + (slim ? ' slim' : '')}>
     <aside className="rail no-print">
       <Link to="/" className="brand" title="Home"><span className="brand-mark">℞</span><span className="lbl"><b>{L.clinic_name_hi}</b><small>Arogya Rx</small></span></Link>
-      {nav.map(x => <NavLink key={x.to} to={x.to} end={x.to === '/'} className={({ isActive }) => 'nav-a' + (isActive ? ' active' : '')} title={slim ? x.label : undefined} aria-label={x.label}><Icon n={x.n} /><span className="lbl">{x.label}</span></NavLink>)}
+      {nav.map(x => <NavLink key={x.to} to={x.to} className={({ isActive }) => 'nav-a' + (isActive ? ' active' : '')} title={slim ? x.label : undefined} aria-label={x.label}><Icon n={x.n} /><span className="lbl">{x.label}</span></NavLink>)}
       <button type="button" className="nav-a rail-toggle" onClick={toggle} title={slim ? 'Expand menu' : 'Collapse menu'} aria-label={slim ? 'Expand menu' : 'Collapse menu'} aria-pressed={slim}><Icon n="sidebar" /><span className="lbl">Collapse menu</span></button>
       <div className="rail-foot">
         <span className="avatar">{me.user.name.replace(/^Dr\.?\s*/i, '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
@@ -78,7 +75,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       </div>
     </aside>
     <main className="main">{children}</main>
-    <nav className="tabbar no-print">{nav.filter(x => x.tab).map(x => <NavLink key={x.to} to={x.to} end={x.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}><Icon n={x.n} />{x.label}</NavLink>)}</nav>
+    <nav className="tabbar no-print">{nav.filter(x => x.tab).map(x => <NavLink key={x.to} to={x.to} className={({ isActive }) => (isActive ? 'active' : '')}><Icon n={x.n} />{x.label}</NavLink>)}</nav>
   </div>
 }
 

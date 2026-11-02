@@ -3,7 +3,7 @@ import QRCode from 'qrcode'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { inr, fmtDate, d10 } from '../lib/format'
-import { Modal, useToast } from './ui'
+import { Modal, useToast, useDialog } from './ui'
 import Icon from './Icon'
 import { printOnly } from './RxActions'
 import './parchi.css'
@@ -15,7 +15,7 @@ export function upiLink(vpa: string, payee: string, amount: number, note: string
 }
 
 export function ReceiptDialog({ billId, onClose, onChange }: { billId: string; onClose: () => void; onChange?: () => void }) {
-  const me = useMe(), toast = useToast()
+  const me = useMe(), toast = useToast(), dlg = useDialog()
   const L = me.clinic.settings.letterhead, F = me.clinic.settings.fees
   const [b, setB] = useState<Bill | null>(null)
   const qr = useRef<HTMLCanvasElement>(null)
@@ -26,7 +26,7 @@ export function ReceiptDialog({ billId, onClose, onChange }: { billId: string; o
   useEffect(() => { if (showQr && qr.current && b) QRCode.toCanvas(qr.current, upiLink(F.upi_vpa, F.payee_name, net, `Bill ${b.bill_no}`), { width: 150, margin: 1 }) }, [showQr, b]) // eslint-disable-line
   if (!b) return null
   const settle = async (mode: string) => { try { await api(`/bills/${b.id}/settle`, { body: { mode } }); toast('Marked as paid', 'ok'); load(); onChange?.() } catch (e: any) { toast(e.message, 'err') } }
-  const voidIt = async () => { const reason = prompt('Why is this bill being cancelled?'); if (!reason) return; try { await api(`/bills/${b.id}/void`, { body: { reason } }); toast('Bill cancelled'); load(); onChange?.() } catch (e: any) { toast(e.message, 'err') } }
+  const voidIt = async () => { const reason = await dlg.prompt('Cancel this bill?', { text: 'Why is this bill being cancelled?', ok: 'Cancel bill' }); if (!reason) return; try { await api(`/bills/${b.id}/void`, { body: { reason } }); toast('Bill cancelled'); load(); onChange?.() } catch (e: any) { toast(e.message, 'err') } }
   const wa = () => {
     if (!b.phone) return toast('No mobile number on file.', 'err')
     const text = `${L.clinic_name_en} — Receipt #${b.bill_no}\n${b.name}, ${fmtDate(d10(b.bill_date))}\n${b.items.map(i => `${i.label}: ${inr(i.amount)}`).join('\n')}${b.discount ? `\nDiscount: −${inr(b.discount)}` : ''}\nTotal: ${inr(net)} (${b.status === 'due' ? 'unpaid' : b.mode.toUpperCase()})${b.status === 'due' && F.upi_vpa ? `\nPay by UPI: ${F.upi_vpa}` : ''}\nधन्यवाद!`

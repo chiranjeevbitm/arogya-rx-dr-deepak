@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { sql, HttpError } from '../db.js'
 import { body, me, P, type Env } from '../app.js'
-import { requireAuth, hashPassword } from '../lib/auth.js'
+import { requireAuth, hashPassword, forgetUser } from '../lib/auth.js'
 import { audit } from '../lib/audit.js'
 import { putFile, getFile } from '../lib/storage.js'
 import { mergeSettings } from '../../shared/settings.js'
@@ -68,6 +68,7 @@ r.patch('/staff/:id', requireAuth('doctor', 'admin'), async c => {
       session_version = session_version + ${b.password || b.active === false || b.role ? 1 : 0}
     where id = ${id} and clinic_id = ${me(c).clinic_id} returning id, name, phone, role, active`
   if (!u) throw new HttpError(404, 'Staff member not found.')
+  forgetUser(id)
   await audit(c, 'staff.update', 'user', id, { active: b.active, role: b.role, password_reset: !!b.password })
   return c.json(u)
 })

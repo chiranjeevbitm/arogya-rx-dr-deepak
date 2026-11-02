@@ -14,6 +14,8 @@ export default function Billing() {
   const rep = useAsync(() => isDoc ? api<any>(`/bills/report/collection?from=${from}&to=${to}`) : Promise.resolve(null), [from])
   const live = (bills.data || []).filter(b => b.status !== 'void')
   const sum = (f: (b: any) => boolean) => live.filter(f).reduce((s, b) => s + b.paid, 0)
+  const day = useAsync(() => api<any>('/clinic/summary'), [])
+  const D = day.data, mmss = (n: number) => Math.floor(n / 60) + ':' + String(Math.round(n % 60)).padStart(2, '0')
   const due = live.filter(b => b.status === 'due')
   const csv = () => {
     const rows = [['Bill no', 'Date', 'Patient', 'OP no', 'Items', 'Total', 'Discount', 'Paid', 'Mode', 'Status'], ...(bills.data || []).map(b => [b.bill_no, d10(b.bill_date), b.name, b.uhid, b.items.map((i: any) => `${i.label} ${i.amount}`).join('; '), b.total, b.discount, b.paid, b.mode, b.status])]
@@ -29,11 +31,12 @@ export default function Billing() {
       <div className="stat"><b>{inr(sum(b => b.mode === 'upi'))}</b><span>UPI</span></div>
       <div className="stat"><b>{inr(due.reduce((s, b) => s + b.total - b.discount, 0))}</b><span>unpaid ({due.length})</span></div>
     </div>
+    {range === 'today' && D && <p className="small muted" style={{ margin: 0 }}>Today: {D.visits.done} of {D.visits.total} patients seen{D.avg_secs ? ` · ${mmss(D.avg_secs)} average per parchi` : ''}{D.wa_sent ? ` · ${D.wa_sent} WhatsApp parchis sent` : ''}{isDoc && D.saved ? ` · patients saved ${inr(D.saved)} by choosing generics` : ''}</p>}
     {isDoc && rep.data && rep.data.days.length > 1 && <div className="card tbl-wrap"><table className="t"><thead><tr><th>Day</th><th className="num">Patients</th><th className="num">New</th><th className="num">Cash</th><th className="num">UPI</th><th className="num">Total</th></tr></thead><tbody>
       {rep.data.days.map((d: any) => { const v = rep.data.visits.find((x: any) => x.day === d.day); return <tr key={d.day}><td>{fmtDate(d.day)}</td><td className="num">{v?.visits ?? 0}</td><td className="num">{v?.new_visits ?? 0}</td><td className="num">{inr(d.cash)}</td><td className="num">{inr(d.upi)}</td><td className="num"><b>{inr(d.collected)}</b></td></tr> })}
     </tbody></table></div>}
     <div className="card flush">
-      {bills.loading && !bills.data ? <Spinner /> : (bills.data || []).length === 0 ? <div className="empty"><b>No bills yet</b>Make a bill from the queue on the Today screen.</div> :
+      {bills.loading && !bills.data ? <Spinner /> : (bills.data || []).length === 0 ? <div className="empty"><b>No bills yet</b>Make a bill from the queue on the OPD screen.</div> :
         <div className="tbl-wrap"><table className="t"><thead><tr><th>No.</th><th>Patient</th><th>Items</th><th className="num">Amount</th><th>Paid by</th><th>Time</th></tr></thead><tbody>
           {bills.data!.map(b => <tr key={b.id} onClick={() => setReceipt(b.id)} style={{ cursor: 'pointer', opacity: b.status === 'void' ? .5 : 1 }}>
             <td>#{b.bill_no}</td><td><b>{b.name}</b><br /><span className="small muted">{b.uhid}</span></td><td className="small">{b.items.map((i: any) => i.label).join(', ')}</td>

@@ -42,13 +42,25 @@ export async function startSession(c: Context, u: { id: string; session_version:
 export function endSession(c: Context) { deleteCookie(c, COOKIE, { path: '/' }) }
 function isSecure(c: Context) { return new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto') === 'https' }
 
+/** One round trip less on every API call: the user row is kept in memory for 20 s per server instance.
+    Logging out elsewhere, deactivating a user or changing the password takes effect within that window. */
+const userCache = new Map<string, { row: any; until: number }>()
+async function userRow(id: string) {
+  const hit = userCache.get(id)
+  if (hit && hit.until > Date.now()) return hit.row
+  const [row] = await sql()`select id, clinic_id, name, role, phone, session_version, active from arx.users where id = ${id}`
+  if (row) { if (userCache.size > 200) userCache.clear(); userCache.set(id, { row, until: Date.now() + 20_000 }) }
+  return row
+}
+export const forgetUser = (id: string) => { userCache.delete(id) }
+
 /** Resolves the logged-in user; refreshes the cookie when it is past half-life. */
 export async function currentUser(c: Context): Promise<AuthUser | null> {
   const token = getCookie(c, COOKIE)
   if (!token) return null
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ['HS256'] })
-    const [u] = await sql()`select id, clinic_id, name, role, phone, session_version, active from arx.users where id = ${payload.sub as string}`
+    const u = await userRow(payload.sub as string)
     if (!u || !u.active || u.session_version !== payload.sv) return null
     const age = Date.now() / 1000 - (payload.iat || 0)
     if (age > (TTL_HOURS * 3600) / 2) await startSession(c, u as any)

@@ -43,7 +43,7 @@ function DoctorOpd() {
   }
   const next = async () => {
     try { const r = await api<{ visit_id: string }>('/visits/next', { method: 'POST' }); const s = await api<{ rx_id: string }>(`/visits/${r.visit_id}/start`, { method: 'POST' }); q.reload(); nav(`/opd/${s.rx_id}`) }
-    catch (e: any) { toast(e.message, 'err'); nav('/opd') }
+    catch (e: any) { toast(e.message, e.status === 404 ? 'info' : 'err'); nav('/opd') }
   }
   const waiting = list.filter(v => v.status === 'waiting')
   // on every load: tell the doctor which patients in the queue still hold a valid parchi (21 days)

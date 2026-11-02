@@ -102,6 +102,7 @@ a.chip { text-decoration: none }
 .list { display: flex; flex-direction: column }
 .list > * + * { border-top: 1px solid var(--line) }
 .li { display: flex; align-items: center; gap: 12px; padding: 11px 14px; text-decoration: none; color: inherit; background: none; border: 0; width: 100%; text-align: left; cursor: pointer }
+.li > svg { width: 20px; height: 20px; flex: none; color: var(--muted) }
 button.li:hover, a.li:hover { background: var(--ink-tint) }
 table.t { width: 100%; border-collapse: collapse; font-size: 14px }
 .t th { text-align: left; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--desk) }
@@ -154,6 +155,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px }
 .toast { pointer-events: auto; background: var(--text); color: #fff; padding: 10px 16px; border-radius: var(--r); font-size: 14.5px; box-shadow: var(--lift); max-width: min(560px, calc(100vw - 32px)); animation: rise .2s ease }
 .toast.err { background: var(--sindoor) }
 .toast.ok { background: var(--neem) }
+.toast.info { background: var(--ink-deep, #16295f) }
 @media (max-width: 900px) { .toasts { bottom: calc(86px + env(safe-area-inset-bottom)) } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important } }
 

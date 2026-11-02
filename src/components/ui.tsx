@@ -1,17 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import Icon from './Icon'
 
-type Toast = { id: number; text: string; kind?: 'ok' | 'err' }
-const ToastCtx = createContext<(text: string, kind?: 'ok' | 'err') => void>(() => {})
+type Toast = { id: number; text: string; kind?: 'ok' | 'err' | 'info' }
+const ToastCtx = createContext<(text: string, kind?: 'ok' | 'err' | 'info') => void>(() => {})
 export const useToast = () => useContext(ToastCtx)
 export function ToastHost({ children }: { children: ReactNode }) {
   const [list, setList] = useState<Toast[]>([])
-  const push = useCallback((text: string, kind?: 'ok' | 'err') => {
+  const push = useCallback((text: string, kind?: 'ok' | 'err' | 'info') => {
     const id = Date.now() + Math.random()
     setList(l => [...l.slice(-2), { id, text, kind }])
     setTimeout(() => setList(l => l.filter(t => t.id !== id)), kind === 'err' ? 6500 : 3500)
   }, [])
-  return <ToastCtx.Provider value={push}>{children}<div className="toasts" role="status" aria-live="polite">{list.map(t => <div key={t.id} className={'toast ' + (t.kind || '')}>{t.text}</div>)}</div></ToastCtx.Provider>
+  return <ToastCtx.Provider value={push}><DialogHost>{children}</DialogHost><div className="toasts" role="status" aria-live="polite">{list.map(t => <div key={t.id} className={'toast ' + (t.kind || '')}>{t.text}</div>)}</div></ToastCtx.Provider>
 }
 
 export function Modal({ title, onClose, children, footer, width }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
@@ -77,4 +77,24 @@ export function useLive(fn: () => void, ms: number) {
   }, [ms])
 }
 
-export function confirmAsk(text: string) { return window.confirm(text) }
+/** In-app replacements for the browser's confirm()/prompt(): they never block the page and look like the rest of the app. */
+type DlgReq = { kind: 'confirm' | 'prompt'; title: string; text?: string; value?: string; ok: string; danger?: boolean; alt?: string; res: (v: any) => void }
+const DlgCtx = createContext<{ ask: (title: string, o?: { text?: string; ok?: string; danger?: boolean; alt?: string }) => Promise<'ok' | 'alt' | null>; prompt: (title: string, o?: { text?: string; value?: string; ok?: string }) => Promise<string | null> }>({ ask: async () => null, prompt: async () => null })
+export const useDialog = () => useContext(DlgCtx)
+export function DialogHost({ children }: { children: ReactNode }) {
+  const [req, setReq] = useState<DlgReq | null>(null), [val, setVal] = useState('')
+  const api = useRef({
+    ask: (title: string, o: { text?: string; ok?: string; danger?: boolean; alt?: string } = {}) => new Promise<'ok' | 'alt' | null>(res => setReq({ kind: 'confirm', title, text: o.text, ok: o.ok || 'OK', danger: o.danger, alt: o.alt, res })),
+    prompt: (title: string, o: { text?: string; value?: string; ok?: string } = {}) => new Promise<string | null>(res => { setVal(o.value || ''); setReq({ kind: 'prompt', title, text: o.text, value: o.value, ok: o.ok || 'Save', res }) }),
+  })
+  const done = (v: any) => { req?.res(v); setReq(null) }
+  return <DlgCtx.Provider value={api.current}>{children}
+    {req && <Modal title={req.title} width={460} onClose={() => done(null)} footer={<>
+      <button className="btn" onClick={() => done(null)}>Cancel</button>
+      {req.alt && <button className="btn" onClick={() => done('alt')}>{req.alt}</button>}
+      <button className={'btn ' + (req.danger ? 'danger' : 'primary')} disabled={req.kind === 'prompt' && val.trim().length < 2} onClick={() => done(req.kind === 'prompt' ? val.trim() : 'ok')}>{req.ok}</button></>}>
+      {req.text && <p style={{ margin: '0 0 10px' }}>{req.text}</p>}
+      {req.kind === 'prompt' && <input className="inp" value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && val.trim().length >= 2) done(val.trim()) }} />}
+    </Modal>}
+  </DlgCtx.Provider>
+}

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { sql, HttpError } from '../db.js'
 import { body, me, type Env } from '../app.js'
-import { verifyPassword, hashPassword, startSession, endSession, currentUser, requireAuth } from '../lib/auth.js'
+import { verifyPassword, hashPassword, startSession, endSession, currentUser, requireAuth, forgetUser } from '../lib/auth.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { audit, clientIp } from '../lib/audit.js'
 import { mergeSettings } from '../../shared/settings.js'
@@ -49,6 +49,7 @@ r.post('/password', requireAuth(), async c => {
   const [row] = await sql()`select password_hash, session_version from arx.users where id = ${u.id}`
   if (!(await verifyPassword(b.current, row.password_hash))) throw new HttpError(400, 'Current password is wrong.')
   const [nu] = await sql()`update arx.users set password_hash = ${await hashPassword(b.next)}, session_version = session_version + 1 where id = ${u.id} returning id, session_version`
+  forgetUser(u.id)
   await startSession(c, nu as any)
   await audit(c, 'password.change', 'user', u.id)
   return c.json({ ok: true })
