@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { startDictation, recordAudio, micMessage, liveSpeech, splitPcm, b64, type Recorded } from './media'
-import { useMe } from './session'
+import { startDictation, recordAudio, micMessage, liveSpeech } from './media'
 
 export type DictMode = 'record' | 'live'
 const MODE_KEY = 'arx.voiceMode'
@@ -16,9 +15,8 @@ export type KeepInfo = { kind: 'consult' | 'intake'; patient_id?: string | null;
 
 export function useDictation(lang: string, toast: (m: string, kind?: 'err') => void, keep?: KeepInfo) {
   const [text, setText] = useState(''), [interim, setInterim] = useState(''), [rec, setRec] = useState<'idle' | 'live' | 'audio'>('idle'), [transcribing, setTranscribing] = useState(false)
-  const murf = useMe().features.stt === 'murf'   // Murf is the only speech to text when the clinic has a Murf key: no browser live text
   const [modeS, setModeS] = useState<DictMode>(() => { try { return (localStorage.getItem(MODE_KEY) as DictMode) || 'record' } catch { return 'record' } })
-  const mode: DictMode = murf ? 'record' : modeS
+  const mode: DictMode = modeS
   const [status, setStatus] = useState(''), [level, setLevel] = useState(0), [secs, setSecs] = useState(0)
   const ctl = useRef<{ stop: () => any } | null>(null), base = useRef(''), peak = useRef(0), t0 = useRef(0), [saved, setSaved] = useState(0)
   const liveRec = useRef<Promise<Awaited<ReturnType<typeof recordAudio>> | null> | null>(null), liveText = useRef('')
@@ -29,16 +27,15 @@ export function useDictation(lang: string, toast: (m: string, kind?: 'err') => v
   const record = async () => {
     try {
       peak.current = 0
-      const a = await recordAudio(v => { setLevel(v); if (v > peak.current) peak.current = v }, { pcm: murf })
+      const a = await recordAudio(v => { setLevel(v); if (v > peak.current) peak.current = v })
       t0.current = Date.now(); setSecs(0)
       setStatus(`Recording from ${a.label}. Speak now; the green bar should move. Then press Stop.`)
       ctl.current = { stop: async () => {
         setRec('idle'); setLevel(0)
         const quiet = peak.current < 0.04
-        let audio: Recorded
+        let audio: Awaited<ReturnType<typeof a.stop>>
         try { audio = await a.stop() } catch (e: any) { setStatus(e.message); return }
         setTranscribing(true); setStatus('Turning speech into text…')
-        if (murf) return viaMurf(audio, quiet)
         try {
           const { base64, mime } = audio
           const t = await api<{ text: string; recording_id?: string | null }>('/ai/transcribe', { body: { audio_base64: base64, mime, lang: lang.startsWith('en') ? 'en' : 'hi', ...(keep ? { keep: { ...keep, seconds: audio.seconds } } : {}) } })
@@ -50,31 +47,6 @@ export function useDictation(lang: string, toast: (m: string, kind?: 'err') => v
       } }
       setRec('audio')
     } catch (e: any) { setRec('idle'); const m = micMessage(e); setStatus(m); toast(m, 'err') }
-  }
-
-  /** Murf: send the 16 kHz audio in pieces (up to 45 s each, cut at pauses), join the words, then keep the small recording with them. */
-  const viaMurf = async (audio: Recorded, quiet: boolean) => {
-    const pieces = audio.pcm?.length ? splitPcm(audio.pcm) : []
-    const words: string[] = []
-    let failed: string | null = null
-    try {
-      if (!pieces.length) throw new Error('No audio was captured. Reload the page and try again.')
-      for (let i = 0; i < pieces.length; i++) {
-        if (pieces.length > 1) setStatus(`Turning speech into text… part ${i + 1} of ${pieces.length}`)
-        const p = pieces[i]
-        const t = await api<{ text: string }>('/ai/transcribe', { body: { pcm_base64: b64(new Uint8Array(p.buffer, p.byteOffset, p.byteLength)), rate: 16000, lang: lang.startsWith('en') ? 'en' : 'hi' }, timeoutMs: 58000 })
-        if (t.text?.trim()) words.push(t.text.trim())
-      }
-    } catch (e: any) { failed = e.message }
-    const heard = words.join(' ')
-    if (heard) setText(x => (x ? x + ' ' : '') + heard)
-    // keep the recording whatever happened, so nothing said is lost
-    let kept = false
-    if (keep) try { const r = await api<{ id: string | null }>('/recordings', { body: { ...keep, audio_base64: audio.base64, mime: audio.mime, seconds: audio.seconds, transcript: heard } }); kept = !!r.id; if (kept) setSaved(n => n + 1) } catch (e: any) { console.warn('[voice] recording not kept', e?.message) }
-    if (failed) { const m = `${failed}${kept ? ' The recording was saved.' : ''}`; setStatus(m); toast(m, 'err') }
-    else if (!heard) setStatus(quiet ? 'No sound reached the microphone. Check that the right microphone is chosen and not muted.' : 'No words were recognised. Speak a little louder and closer, then try again.')
-    else setStatus('')
-    setTranscribing(false)
   }
 
   /** Live text gives no audio, so record alongside it (when keeping recordings) and store it with the words heard. */
@@ -106,5 +78,5 @@ export function useDictation(lang: string, toast: (m: string, kind?: 'err') => v
 
   const start = async () => { setStatus(''); if (mode === 'live') live(); else await record() }
   const stop = () => { const c = ctl.current; ctl.current = null; setInterim(''); setRec('idle'); setLevel(0); try { c?.stop() } catch { /* ignore */ } }
-  return { text, setText, interim, rec, transcribing, start, stop, mode, setMode, status, level, secs, saved, keeping: !!keep, murf }
+  return { text, setText, interim, rec, transcribing, start, stop, mode, setMode, status, level, secs, saved, keeping: !!keep }
 }

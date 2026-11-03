@@ -200,7 +200,6 @@ function Messages() {
       </section>
       <section className="card stack tight"><h3>AI (voice and photo)</h3>
         {me.features.ai ? <span className="tag green">On: {me.features.ai_providers || `OpenAI ${me.features.ai_model}`}</span> : <span className="tag amber">No AI key</span>}
-        {me.features.stt === 'murf' && <p className="small"><span className="tag green">Speech to text: Murf</span> Every dictation is recorded and Murf (India) writes it down, Hinglish included. The words then go to the AI for the draft.</p>}
         <p className="small muted">Voice: Chrome and Edge write your words live for free; other browsers record and the server turns the audio into text (Groq Whisper, free, or OpenAI). The words then become a draft with AI, or with basic rules if no AI answers. Photos of old prescriptions and reports need OpenAI. Every result is a draft for the doctor to check.</p>
         {!/Groq/.test(me.features.ai_providers || '') && <p className="small muted">Free option: make a Groq account at console.groq.com, create an API key, and add it in Vercel as GROQ_API_KEY.</p>}
         <AiCheck />

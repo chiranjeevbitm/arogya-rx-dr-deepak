@@ -8,7 +8,6 @@ import { rateLimit } from '../lib/ratelimit.js'
 import { aiJson, aiConfigured, aiModel, aiProviders, aiCheck, transcribe } from '../lib/ai.js'
 import { basicParse, trigramSim } from '../../shared/basicRx.js'
 import { saveRecording, RecordingMeta } from './recordings.js'
-import { murfConfigured, murfTranscribe, murfCheck } from '../lib/murf.js'
 import { putFile } from '../lib/storage.js'
 import { detectForm, defaultDose, defaultRoute, normFreq, istToday } from '../../shared/rx.js'
 
@@ -34,14 +33,14 @@ Rules:
 - BP like "138 by 86" becomes "138/86". Temperature in °F. Sugar/GRBS in mg/dL.
 - follow_up_days from phrases like "5 din baad dikhayein".`
 
-r.get('/status', c => c.json({ configured: aiConfigured(), model: aiModel(), providers: aiProviders(), stt: murfConfigured() ? 'murf' : 'server' }))
+r.get('/status', c => c.json({ configured: aiConfigured(), model: aiModel(), providers: aiProviders(), stt: 'server' }))
 
 /** Settings → AI: a live check of each provider and the last few AI errors (no patient data). */
 r.get('/check', requireAuth('doctor', 'admin'), async c => {
   const u = me(c)
   await rateLimit(`aicheck:${u.id}`, 20, 3600)
-  const [providers, murf, recent] = await Promise.all([aiCheck(), murfConfigured() ? murfCheck() : Promise.resolve(null), sql()`select kind, provider, model, ok, error, ms, created_at from arx.ai_usage where clinic_id = ${u.clinic_id} order by created_at desc limit 12`.catch(() => [])])
-  return c.json({ providers: murf ? [{ provider: 'Murf speech to text', ...murf }, ...providers] : providers, recent })
+  const [providers, recent] = await Promise.all([aiCheck(), sql()`select kind, provider, model, ok, error, ms, created_at from arx.ai_usage where clinic_id = ${u.clinic_id} order by created_at desc limit 12`.catch(() => [])])
+  return c.json({ providers, recent })
 })
 
 /** No AI answered: read the dictation with fixed rules and the medicine list, so the doctor still gets a draft. */
@@ -127,20 +126,11 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
 r.post('/transcribe', async c => {
   const b = await body(c, z.object({
     audio_base64: z.string().max(14_000_000).optional(), mime: z.string().max(60).optional(),
-    pcm_base64: z.string().max(4_400_000).optional(), rate: z.coerce.number().int().min(8000).max(48000).optional(),   // 16 kHz PCM for Murf, about 50 s per piece
     lang: z.enum(['hi', 'en']).optional(), keep: RecordingMeta.optional(),
   }))
   const u = me(c)
   await rateLimit(`ai:${u.id}`, 240, 3600)
   let text = '', err: any = null
-  if (murfConfigured()) {
-    // Murf is the only speech-to-text when MURF_KEY is set
-    if (!b.pcm_base64) throw new HttpError(400, 'Please reload the page: this screen is from an older version.')
-    try { text = await murfTranscribe(Buffer.from(b.pcm_base64, 'base64'), { lang: b.lang || 'hi', rate: b.rate || 16000, keywords: await medKeywords(u.clinic_id) }) } catch (e) { err = e }
-    await sql()`insert into arx.ai_usage (clinic_id, user_id, kind, provider, model, ms, ok, error) values (${u.clinic_id}, ${u.id}, 'transcribe', 'murf', 'stt-stream', ${0}, ${!err}, ${err ? String(err.message).slice(0, 300) : null})`.catch(() => {})
-    if (err) throw err
-    return c.json({ text, provider: 'murf' })
-  }
   if (!b.audio_base64 || !b.mime) throw new HttpError(400, 'No audio was sent.')
   const audio = Buffer.from(b.audio_base64, 'base64')
   // keep the recording even if speech-to-text fails, so nothing the doctor said is lost
@@ -150,17 +140,6 @@ r.post('/transcribe', async c => {
   if (err) { if (recording_id) err.message = `${err.message} The recording was saved.`; throw err }
   return c.json({ text, recording_id })
 })
-
-/** The doctor's most-used medicines (first word, e.g. "Dolo", "Pantocid"), so Murf favours them when it hears them. */
-const kwCache = new Map<string, { at: number; list: string[] }>()
-async function medKeywords(clinicId: string): Promise<string[]> {
-  const hit = kwCache.get(clinicId)
-  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.list
-  const rows = await sql()`select name from arx.med_usage where clinic_id = ${clinicId} order by pinned desc, uses desc limit 80`.catch(() => [] as any[])
-  const list = [...new Set(rows.map((r: any) => String(r.name).match(/^[A-Za-z][A-Za-z-]{2,}/)?.[0]).filter(Boolean) as string[])].slice(0, 30)
-  kwCache.set(clinicId, { at: Date.now(), list })
-  return list
-}
 
 const SCAN_SCHEMA = S({
   doc_type: { type: 'string', enum: ['old_rx', 'lab_report', 'other'] }, legible: { type: 'boolean' },

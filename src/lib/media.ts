@@ -89,7 +89,7 @@ const SILENT_HELP = 'Choose another microphone in the list, check it is plugged 
 /** Record audio for server-side transcription (works in any browser with a microphone, including iPhone Safari).
     onLevel gets the loudness 0..1 many times a second. Uses the microphone chosen in the voice window, if any. */
 export type Recorded = { base64: string; mime: string; seconds: number; bytes: number; pcm?: Int16Array }
-/** pcm: also capture 16 kHz mono 16-bit PCM (for Murf speech to text) next to the small compressed file. */
+/** pcm: also capture 16 kHz mono 16-bit PCM next to the small compressed file. */
 export async function recordAudio(onLevel?: (v: number) => void, opts: { pcm?: boolean } = {}): Promise<{ label: string; stop: () => Promise<Recorded> }> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw Object.assign(new Error('unsupported'), { name: 'NotSupportedError' })
   const base = { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, id = savedMic()
