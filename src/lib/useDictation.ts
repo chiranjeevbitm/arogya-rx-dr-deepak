@@ -38,7 +38,7 @@ export function useDictation(lang: string, toast: (m: string, kind?: 'err') => v
         setTranscribing(true); setStatus('Turning speech into text…')
         try {
           const { base64, mime } = audio
-          const t = await api<{ text: string; recording_id?: string | null }>('/ai/transcribe', { body: { audio_base64: base64, mime, lang: lang.startsWith('en') ? 'en' : 'hi', ...(keep ? { keep: { ...keep, seconds: audio.seconds } } : {}) } })
+          const t = await api<{ text: string; recording_id?: string | null }>('/ai/transcribe', { body: { audio_base64: base64, mime, lang: lang.startsWith('en') ? 'en' : 'hi', seconds: audio.seconds, ...(keep ? { keep: { ...keep, seconds: audio.seconds } } : {}) } })
           if (t.recording_id) setSaved(n => n + 1)
           const words = (t.text || '').trim()
           if (!words) setStatus(quiet ? 'No sound reached the microphone. Check that the right microphone is chosen and not muted (lock icon next to the address → Microphone).' : 'No words were recognised. Speak a little louder and closer, then try again.')

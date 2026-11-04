@@ -6,7 +6,7 @@ import { fileUrl } from '../lib/api'
 
 export type RxData = {
   complaints?: string; diagnosis?: string; vitals?: Record<string, string>; exam?: Record<string, string>; systemic?: Record<string, string>
-  comorbid?: Record<string, boolean>; comorbid_details?: Record<string, Record<string, any>>; addiction?: Record<string, boolean>
+  comorbid?: Record<string, boolean>; comorbid_details?: Record<string, Record<string, any>>; addiction?: Record<string, boolean>; addiction_note?: string
   investigations?: string[]; advice?: string[]; follow_up?: { days?: number | null; note?: string }; hindi?: boolean
 }
 export type ParchiPatient = { name: string; age_years?: number | null; sex?: string | null; address?: string | null; uhid?: string; phone?: string | null; allergies?: string[] }

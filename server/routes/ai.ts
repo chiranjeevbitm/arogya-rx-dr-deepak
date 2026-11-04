@@ -126,7 +126,7 @@ r.post('/voice-rx', requireAuth('doctor', 'admin'), async c => {
 r.post('/transcribe', async c => {
   const b = await body(c, z.object({
     audio_base64: z.string().max(14_000_000).optional(), mime: z.string().max(60).optional(),
-    lang: z.enum(['hi', 'en']).optional(), keep: RecordingMeta.optional(),
+    lang: z.enum(['hi', 'en']).optional(), keep: RecordingMeta.optional(), seconds: z.number().min(0).max(3600).optional(),
   }))
   const u = me(c)
   await rateLimit(`ai:${u.id}`, 240, 3600)
@@ -134,7 +134,7 @@ r.post('/transcribe', async c => {
   if (!b.audio_base64 || !b.mime) throw new HttpError(400, 'No audio was sent.')
   const audio = Buffer.from(b.audio_base64, 'base64')
   // keep the recording even if speech-to-text fails, so nothing the doctor said is lost
-  try { text = await transcribe(audio, b.mime, b.lang || 'hi') } catch (e) { err = e }
+  try { text = await transcribe(audio, b.mime, b.lang || 'hi', b.seconds ?? b.keep?.seconds) } catch (e) { err = e }
   let recording_id: string | null = null
   if (b.keep) try { recording_id = await saveRecording(u.clinic_id, u.id, audio, b.mime, { ...b.keep, transcript: text || undefined }) } catch (e: any) { console.warn('[recordings] not saved', e?.message) }
   if (err) { if (recording_id) err.message = `${err.message} The recording was saved.`; throw err }

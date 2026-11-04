@@ -88,7 +88,7 @@ async function startVisit(tx: any, clinicId: string, userId: string, v: any): Pr
   const data = { complaints: v.complaint || '', vitals: v.vitals || {}, exam: {}, systemic: {}, comorbid: {}, comorbid_details: {}, addiction: {}, investigations: [], advice: [], diagnosis: '', follow_up: { days: null, note: '' }, hindi: true }
   // carry chronic conditions and comorbidity details forward from the last final prescription
   const [last] = await tx`select data from arx.prescriptions where patient_id = ${v.patient_id} and status = 'final' order by rx_date desc, created_at desc limit 1`
-  if (last) { data.comorbid = last.data.comorbid || {}; data.comorbid_details = last.data.comorbid_details || {}; data.addiction = last.data.addiction || {} }
+  if (last) { data.comorbid = last.data.comorbid || {}; data.comorbid_details = last.data.comorbid_details || {}; data.addiction = last.data.addiction || {}; (data as any).addiction_note = last.data.addiction_note || '' }
   const [n] = await tx`insert into arx.prescriptions (clinic_id, patient_id, visit_id, rx_date, data, created_by)
     values (${clinicId}, ${v.patient_id}, ${v.id}, ${istToday()}, ${tx.json(data as any)}, ${userId}) returning id`
   return n.id

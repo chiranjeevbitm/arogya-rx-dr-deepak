@@ -32,6 +32,7 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-router-dom": "7.18.5",
+    "sarvamai": "^1.1.15",
     "zod": "4.6.7"
   },
   "devDependencies": {

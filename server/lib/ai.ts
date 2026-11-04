@@ -105,7 +105,23 @@ async function groqJson(o: Parameters<typeof aiJson>[0], ms: number, onUsage: (u
 
 /** Speech to text for browsers whose live speech does not work (Brave, Firefox, some phones, no network to the speech service).
     Groq Whisper first (free), then OpenAI. lang: 'hi' (Hinglish/Hindi) or 'en'. */
-export async function transcribe(audio: Buffer, mime: string, lang: 'hi' | 'en' = 'hi'): Promise<string> {
+/** Sarvam saaras:v3 (one flat price, built for Hindi/Hinglish). Its sync API takes clips up to 30 s only. */
+async function sarvamTranscribe(audio: Buffer, mime: string): Promise<string> {
+  const ext = mime.includes('webm') ? 'webm' : mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogg' : mime.includes('wav') ? 'wav' : 'webm'
+  const fd = new FormData()
+  fd.append('file', new Blob([new Uint8Array(audio)], { type: mime }), 'consult.' + ext)
+  fd.append('model', process.env.SARVAM_MODEL || 'saaras:v3'); fd.append('mode', 'codemix')
+  const r = await fetch('https://api.sarvam.ai/speech-to-text', { method: 'POST', headers: { 'api-subscription-key': process.env.SARVAM_API_KEY || '' }, body: fd, signal: AbortSignal.timeout(25000) })
+  const b: any = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(`Sarvam: ${b?.error?.message || b?.message || r.status}`)
+  return String(b.transcript || '').trim()
+}
+
+export async function transcribe(audio: Buffer, mime: string, lang: 'hi' | 'en' = 'hi', seconds?: number): Promise<string> {
+  // Sarvam first for clips of 30 s or less; longer clips (or a Sarvam failure) use the providers below
+  if (process.env.SARVAM_API_KEY && seconds != null && seconds <= 29) {
+    try { return await sarvamTranscribe(audio, mime) } catch (e: any) { console.warn('[stt] sarvam failed, falling back:', e?.message) }
+  }
   const list: Provider[] = (process.env.AI_PROVIDER === 'openai' ? ['openai', 'groq'] : ['groq', 'openai']).filter(p => (p === 'groq' ? groqKey() : openaiKey())) as Provider[]
   if (!list.length) throw new HttpError(503, 'Speech to text is not set up. Add GROQ_API_KEY (free) or OPENAI_API_KEY in the Vercel settings.')
   const ext = mime.includes('webm') ? 'webm' : mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogg' : mime.includes('wav') ? 'wav' : 'webm'

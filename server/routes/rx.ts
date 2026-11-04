@@ -16,7 +16,7 @@ const MedIn = z.object({
   name: z.string().min(1).max(200), kind: z.enum(['ja', 'brand', 'custom']).optional(), form: z.string().max(20).optional(),
   dose: z.string().max(40).optional(), route: z.string().max(30).optional(), freq: z.string().max(40).optional(),
   timing: z.enum(['', 'after', 'before', 'empty', 'with']).optional(), days: z.number().int().min(0).max(3650).nullable().optional(),
-  duration: z.string().max(40).optional(), instructions: z.string().max(200).optional(), price: z.number().nullable().optional(),
+  duration: z.string().max(40).optional(), instructions: z.string().max(400).optional(), price: z.number().nullable().optional(),
 })
 const RxIn = z.object({ data: z.record(z.string(), z.any()), meds: z.array(MedIn).max(30) })
 

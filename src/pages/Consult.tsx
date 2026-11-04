@@ -221,6 +221,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
             })}</div></details>)}
           <span className="lbl">Addiction</span>
           <div className="chips">{ADDICTIONS.map(a => <button type="button" key={a.key} className={'chip' + (data.addiction?.[a.key] ? ' on' : '')} onClick={() => set('addiction', { ...(data.addiction || {}), [a.key]: !data.addiction?.[a.key] })}>{a.label}</button>)}</div>
+          <textarea className="inp sm" rows={2} aria-label="Addiction details" placeholder="Addiction details (e.g. 10 cigarettes/day for 15 years, quit 2 years ago)" value={data.addiction_note || ''} maxLength={500} onChange={e => set('addiction_note', e.target.value)} />
         </fieldset>
       </details>
 
@@ -273,6 +274,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
 function MedRow({ i, m, set, remove, move, alerted, ro, regular, onStar }: { regular: boolean; onStar: () => void; i: number; m: Med; set: (p: Partial<Med>) => void; remove: () => void; move: (d: number) => void; alerted: boolean; ro: boolean }) {
   const ongoing = /^regular$/i.test((m.duration || '').trim())
   const [more, setMore] = useState(false)
+  const [note, setNote] = useState(!!m.instructions)
   return <div className={'medrow' + (alerted ? ' alerted' : '') + (more ? ' expanded' : '')}>
     <span className="sn">{i + 1}</span>
     <div style={{ minWidth: 0 }}>
@@ -293,12 +295,13 @@ function MedRow({ i, m, set, remove, move, alerted, ro, regular, onStar }: { reg
     <div className="days-cell">
       {!ongoing && <input className="inp sm" inputMode="numeric" value={m.days ?? ''} placeholder="days" onChange={e => set({ days: e.target.value ? Math.min(3650, parseInt(e.target.value) || 0) : null, duration: '' })} aria-label="Days" title="Days" />}
       <button type="button" className={'chip' + (ongoing ? ' on' : '')} aria-pressed={ongoing} title={ongoing ? 'Regular: no end date. Click to set days instead' : 'Take regularly, no end date'} onClick={() => set(ongoing ? { duration: '', days: null } : { duration: 'Regular', days: null })}>Regular</button>
+      <button type="button" className={'chip' + (note || m.instructions ? ' on' : '')} aria-pressed={note} title="Add a custom instruction for this medicine" onClick={() => setNote(x => !x)}>{ro ? 'Instruction' : 'Add custom instruction'}</button>
     </div>
     </div>
+    {(note || (ro && m.instructions)) && <div className="med-note"><textarea className="inp sm" rows={2} style={{ width: '100%' }} readOnly={ro} value={m.instructions || ''} maxLength={400} placeholder="Custom instruction for this medicine (e.g. apply a thin layer, take with warm water)" aria-label={`Custom instruction for ${m.name}`} onChange={e => set({ instructions: e.target.value })} /></div>}
     {more && <div className="med-more">
       <select className="inp sm" style={{ width: 130 }} value={m.route || 'Oral'} onChange={e => set({ route: e.target.value })} aria-label="Route">{ROUTES.map(r => <option key={r}>{r}</option>)}</select>
       <input className="inp sm" style={{ width: 130 }} value={m.duration || ''} placeholder="or e.g. Continue" onChange={e => set({ duration: e.target.value, days: e.target.value ? null : m.days })} aria-label="Duration text" />
-      <input className="inp sm grow" value={m.instructions || ''} placeholder="Instructions (e.g. with warm water)" onChange={e => set({ instructions: e.target.value })} />
       <button type="button" className="btn sm" onClick={() => move(-1)}>Up</button><button type="button" className="btn sm" onClick={() => move(1)}>Down</button>
       <button type="button" className="btn sm danger" onClick={remove}><Icon n="trash" />Remove</button>
     </div>}

@@ -536,3 +536,4 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .recs li { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line) }
 .recs li:first-child { border-top: 0; padding-top: 0 }
 .recs-t { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.medrow .med-note { grid-column: 1 / -1; padding-left: 32px }
