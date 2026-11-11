@@ -66,6 +66,16 @@ r.post('/clinic/:slug/book', async c => {
     }
   }
   const clinicWa = cl.settings.whatsapp.clinic_number.replace(/\D/g, '').replace(/^91/, '')
+  // Tell the clinic a booking came in. The Schedule page also badges it until someone looks,
+  // so a booking is not missed when WhatsApp is not set up or the send fails.
+  if (clinicWa && cl.settings.whatsapp.alert_clinic_on_booking && waApiConfigured() && process.env.AISENSY_CLINIC_ALERT_CAMPAIGN) {
+    try {
+      await sendCampaign({ campaign: process.env.AISENSY_CLINIC_ALERT_CAMPAIGN, phone10: clinicWa, name: cl.settings.letterhead.doctor_en, params: [b.name, phone, when] })
+      await sql()`insert into arx.messages (clinic_id, kind, channel, to_phone, status) values (${cl.id}, 'booking', 'api', ${clinicWa}, 'sent')`
+    } catch (e: any) {
+      await sql()`insert into arx.messages (clinic_id, kind, channel, to_phone, status, error) values (${cl.id}, 'booking', 'api', ${clinicWa}, 'failed', ${String(e.message).slice(0, 300)})`
+    }
+  }
   return c.json({ ok: true, id: a.id, when, whatsapp_confirmed: confirmed, clinic_whatsapp: clinicWa ? waLink(clinicWa, `Namaste, I booked an appointment with ${cl.settings.letterhead.doctor_en} on ${when}. Name: ${b.name}`) : null })
 })
 

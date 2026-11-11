@@ -93,6 +93,32 @@ r = await call('POST', '/api/public/clinic/arogya-clinic/book', { name: 'Kavita 
 r = await call('POST', '/api/public/clinic/arogya-clinic/book', { name: 'Bot', phone: '9123456781', date: tomorrow, time: free.time, website: 'spam' }); ok(r.status === 200, 'honeypot silently accepted', r)
 r = await call('GET', `/api/appointments?from=${tomorrow}&to=${tomorrow}`, null, 'reception'); const ap = r.j.find(a => a.name === 'Kavita Sharma'); ok(ap?.source === 'online' && !r.j.some(a => a.name === 'Bot'), 'online booking visible to reception, bot ignored', r.j)
 
+// ---- appointment notifications: an online booking is flagged until staff look, a staff booking is not
+r = await call('GET', '/api/appointments/unseen', null, 'reception')
+ok(r.status === 200 && r.j.some(a => a.name === 'Kavita Sharma'), 'online booking waits in the unseen list', r.j)
+r = await call('POST', '/api/appointments', { name: 'Notify Test', phone: '9934000077', date: tomorrow, time: null, reason: 'Checkup' }, 'reception')
+ok(r.status === 200 && r.j.whatsapp && r.j.whatsapp.sent === false && /wa\.me\/919934000077/.test(r.j.whatsapp.url || '') && /Notify Test/.test(r.j.whatsapp.text || ''), 'staff booking returns a ready WhatsApp confirmation', r.j)
+r = await call('GET', '/api/appointments/unseen', null, 'reception')
+ok(!r.j.some(a => a.name === 'Notify Test'), 'a booking made by staff is already seen', r.j)
+r = await call('POST', '/api/appointments/seen', {}, 'reception'); ok(r.status === 200, 'marking bookings seen works', r)
+r = await call('GET', '/api/appointments/unseen', null, 'reception'); ok(r.j.length === 0, 'nothing unseen after staff looked', r.j)
+
+// ---- scanned documents list for the Lab reports screen
+r = await call('GET', '/api/ai/documents?kind=lab_report', null, 'doctor'); ok(r.status === 200 && Array.isArray(r.j), 'documents list opens for the doctor', r.j)
+r = await call('GET', '/api/ai/documents?kind=lab_report&q=zzzznomatch', null, 'doctor'); ok(r.status === 200 && r.j.length === 0, 'documents search with no match is empty, not an error', r.j)
+
+// ---- per-section colours and fonts survive a save and come back merged
+r = await call('PUT', '/api/clinic/settings', { settings: { letterhead: { colors: { headings: '#1f5e46' }, fonts: { medicines: { family: "'Lora', serif", scale: 1.1 } }, signature_height_mm: 14, show_signature_quals: true, dsc_note: 'Digitally signed with a Class 3 DSC' }, whatsapp: { confirm_appointments: false } } }, 'doctor')
+ok(r.status === 200, 'letterhead colours and fonts save', r)
+r = await call('GET', '/api/auth/me', null, 'doctor')
+const lh = r.j.clinic?.settings?.letterhead
+ok(lh?.colors?.headings === '#1f5e46' && lh?.colors?.header === '' && lh?.fonts?.medicines?.scale === 1.1 && lh?.fonts?.clinic?.family === "'Martel', serif" && lh?.signature_height_mm === 14 && lh?.dsc_note === 'Digitally signed with a Class 3 DSC' && lh?.reg_no === 'BCMR50223',
+  'one section keeps its own colour and font, the rest keep the defaults', lh)
+ok(r.j.clinic?.settings?.whatsapp?.confirm_appointments === false && r.j.clinic?.settings?.whatsapp?.reminder_day_before === true, 'whatsapp switches merge with the defaults', r.j.clinic?.settings?.whatsapp)
+r = await call('POST', '/api/appointments', { name: 'No Confirm', phone: '9934000078', date: tomorrow, time: null }, 'reception')
+ok(r.status === 200 && r.j.whatsapp === null, 'with confirmations off, no message is built', r.j)
+r = await call('PUT', '/api/clinic/settings', { settings: { whatsapp: { confirm_appointments: true } } }, 'doctor'); ok(r.status === 200, 'confirmations turned back on', r)
+
 // import from old app
 // ---- OPD register import (synthetic rows) and dashboard
 {

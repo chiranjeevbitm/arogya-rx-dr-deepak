@@ -7,6 +7,7 @@ import { Modal, Spinner, TagInput, useToast, useDialog, Field } from '../compone
 import Icon from '../components/Icon'
 import MedSearch, { medFromHit } from '../components/MedSearch'
 import { ParchiPreview, type RxData } from '../components/Parchi'
+import { ParchiViewDialog, PreviousParchis } from '../components/ParchiView'
 import { VoiceDialog, ScanDialog } from '../components/AiDialogs'
 import { PrintArea, printOnly, useRxOutput, WhatsAppPreview } from '../components/RxActions'
 import { BillDialog } from '../components/BillDialog'
@@ -29,7 +30,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const [templates, setTemplates] = useState<Template[]>([]), [hist, setHist] = useState<Hist | null>(null)
   const [voice, setVoice] = useState(false), [scan, setScan] = useState(false), [editPt, setEditPt] = useState(false), [override, setOverride] = useState<{ msg: string; then: () => void } | null>(null)
   const [wa, setWa] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [busy, setBusy] = useState(false)
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(Date.now()), [peek, setPeek] = useState<string | null>(null)   // a past parchi being looked at, nothing more
   const first = useRef(true), page = useRef<HTMLDivElement>(null), ver = useRef<string | null>(null), conflictOpen = useRef(false), inflight = useRef<Promise<void>>(Promise.resolve())   // version last loaded or saved on this device
   const out = useRxOutput(rxId, page, !!b?.rx.pdf_file_id)
 
@@ -128,80 +129,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
   const summary = (() => { const p = hist?.prescriptions.find(x => x.status === 'final' && x.id !== rxId); if (!p) return null; const l = hist!.labs.filter(x => x.test === 'HbA1c').slice(-1)[0]; return `Last visit ${fmtDate(d10(p.rx_date))}: ${p.diagnosis || p.complaints || '—'}${p.vitals?.bp ? `, BP ${p.vitals.bp}` : ''}${l ? `, HbA1c ${l.value_num}%` : ''}. On ${p.meds.map(m => m.name.replace(/\s(Tablet|Capsule|Syrup)s?$/i, '')).join(', ') || 'no medicines'}.` })()
   const ro = final
 
-  const paper = <ParchiPreview s={s} patient={patient} data={data} meds={meds} date={d10(b.rx.rx_date)} draft={!final} token={b.visit?.token} />
-  return <>
-    <div className="opd-main">
-      <div className="pt-head">
-        <div>
-          <div className="pt-name">{patient.name}</div>
-          <div className="pt-meta">{ageSex(patient)} · {b.visit ? `Token ${b.visit.token} · ` : ''}{patient.uhid}{patient.phone ? ` · ${patient.phone}` : ' · no mobile'}</div>
-          <div className="pt-tags">
-            {(patient.conditions || []).map((c: string) => <span key={c} className="tag ink">{c}</span>)}
-            {(patient.allergies || []).map((a: string) => <span key={a} className="tag red">Allergic: {a}</span>)}
-            {!patient.conditions?.length && !patient.allergies?.length && <span className="tag">No known conditions</span>}
-            <button className="btn sm ghost" onClick={() => setEditPt(true)}><Icon n="edit" />Edit</button>
-          </div>
-        </div>
-        <div className="row">
-          {elapsed != null && <div className="timer"><span className="mono">{fmtT(elapsed)}</span><small>{final ? 'final time' : 'time on this parchi'}</small></div>}
-          {!final && <span className={'savebadge' + (saved !== 'saved' ? ' dirty' : '')}><i />{saved === 'saved' ? 'Saved' : saved === 'saving' ? 'Saving…' : 'Unsaved'}</span>}
-        </div>
-      </div>
-      {(() => { const val = parchiValidity(lastFinal?.rx_date, d10(b.rx.rx_date)); return val && lastFinal ? <div className="alert ok"><b>Parchi valid</b><span>Last prescription {val.ago === 0 ? 'today' : val.ago === 1 ? 'yesterday' : `${val.ago} days ago`} ({fmtDate(d10(lastFinal.rx_date))}). It is valid for {PARCHI_VALID_DAYS} days, until {fmtDate(val.till)} ({val.daysLeft} day{val.daysLeft === 1 ? '' : 's'} left).</span></div> : null })()}
-      {summary && <div className="summary"><b>Summary of past visits:</b> {summary} {lastFinal && !ro && <button className="btn sm" style={{ marginLeft: 6 }} onClick={() => repeat(lastFinal)}>Repeat medicines</button>}</div>}
-      {final && <div className="alert ok"><b>Final.</b><span className="grow">Print it, send it on WhatsApp, or call the next patient.</span><button className="btn sm" onClick={reopen}>Reopen to edit</button></div>}
-
-      {!ro && <div className="tools">
-        <button className="tool" onClick={() => setVoice(true)}><span className="ic"><Icon n="mic" /></span><span><b>Speak the consult</b><span>{me.features.ai ? 'Hinglish voice to a draft prescription' : 'Voice to a basic draft (add a free Groq key for AI)'}</span></span></button>
-        <button className="tool" onClick={() => setScan(true)} disabled={!me.features.ai}><span className="ic"><Icon n="cam" /></span><span><b>Scan old parchi or report</b><span>Photo to medicines and lab values</span></span></button>
-      </div>}
-
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-co">Complaints</label></div>
-        <textarea id="in-co" className="inp" rows={2} value={data.complaints || ''} onChange={e => set('complaints', e.target.value)} placeholder="e.g. Fever with chills for 3 days" />
-        <div className="chips">{['Fever', 'Cough', 'Cold', 'Body ache', 'Headache', 'Burning urination', 'Acidity', 'Loose motions', 'Vomiting', 'Giddiness', 'Weakness', 'Breathlessness', 'Chest pain', 'Sugar follow-up', 'BP check'].map(c => <button key={c} type="button" className="chip" onClick={() => set('complaints', data.complaints ? data.complaints.replace(/\.?\s*$/, ', ') + c.toLowerCase() : c)}>+ {c}</button>)}</div>
-      </fieldset>
-
-      <details className="sec">
-        <summary><h3>Vitals</h3><span className="small muted">{[v.bp && `BP ${v.bp}`, v.pulse && `Pulse ${v.pulse}`, v.temp && `Temp ${v.temp}`, v.spo2 && `SpO₂ ${v.spo2}`, v.grbs && `GRBS ${v.grbs}`, v.weight && `${v.weight} kg`].filter(Boolean).join(' · ') || 'Not recorded yet'}</span></summary>
-      <fieldset className="sec-b fs" disabled={ro}>
-        <div className="vitals">{([['bp', 'BP', '120/80'], ['pulse', 'Pulse', '72'], ['temp', 'Temp °F', '98.6'], ['spo2', 'SpO₂ %', '98'], ['rr', 'RR', '16'], ['grbs', 'GRBS', '110'], ['weight', 'Weight kg', '60']] as const).map(([k, l, ph]) =>
-          <Field key={k} label={l}><input className={'inp sm mono ' + vitalFlag(k, v[k])} value={v[k] || ''} placeholder={ph} inputMode={k === 'bp' ? 'text' : 'decimal'} onChange={e => setV(k, e.target.value)} /></Field>)}</div>
-      </fieldset>
-      </details>
-
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-dx">Diagnosis · one-tap templates</label>{!ro && <span className="row"><button type="button" className="btn sm ghost" onClick={saveAsTemplate}><Icon n="plus" />Save this as a template</button><Link className="btn sm ghost" to="/settings/templates">Edit templates</Link></span>}</div>
-        <div className="chips">{templates.map(t => <button key={t.id} type="button" className="chip" onClick={() => applyTemplate(t)}>{t.name} <span className="faint tiny">{t.data.meds.length} Rx</span></button>)}</div>
-        <input id="in-dx" className="inp" value={data.diagnosis || ''} onChange={e => set('diagnosis', e.target.value)} placeholder="Provisional diagnosis" />
-      </fieldset>
-
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Medicines</span></div>
-        {!ro && regular.length > 0 && <div className="chips" aria-label="Regular medicines"><span className="lbl" style={{ alignSelf: 'center' }}>★ Regular</span>{regular.map(r => <button key={r.name} type="button" className="chip" onClick={() => setMeds(ms => ms.some(m => m.name === r.name) ? ms : [...ms, medFromHit({ name: r.name, defaults: r.defaults })])}>+ {r.name}</button>)}</div>}
-        {!ro && <MedSearch onPick={m => setMeds(ms => [...ms, m])} />}
-        {meds.length === 0 ? <p className="small muted">Tap a template, search for a medicine, or speak the consult.</p> :
-          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} regular={isRegular(m.name)} onStar={() => toggleRegular(m)} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
-        {alerts.map((a, i) => <div key={i} className={'alert ' + a.level}><b>{a.level === 'crit' ? 'Stop' : a.level === 'warn' ? 'Check' : 'Note'}</b><span>{a.text}</span></div>)}
-      </fieldset>
-
-      <details className="sec">
-        <summary><h3>Investigations and advice</h3><span className="small muted">{[(data.investigations || []).length ? `${(data.investigations || []).length} test${(data.investigations || []).length > 1 ? 's' : ''}` : '', (data.advice || []).length ? `${(data.advice || []).length} advice` : ''].filter(Boolean).join(' · ') || 'None added'}</span></summary>
-        <div className="sec-b">
-      <div className="two">
-        <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Investigations</span></div>
-          <TagInput value={data.investigations || []} onChange={x => set('investigations', x)} placeholder="Add a test" suggestions={COMMON_INVESTIGATIONS.slice(0, 18)} /></fieldset>
-        <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Advice (English + हिंदी)</span></div>
-          <div className="chips">{ADVICE_PRESETS.map(a => { const on = (data.advice || []).includes(a.en); return <button key={a.en} type="button" title={a.hi} className={'chip' + (on ? ' on' : '')} onClick={() => set('advice', on ? data.advice!.filter(x => x !== a.en) : [...(data.advice || []), a.en])}>{a.en}</button> })}</div>
-          <TagInput value={(data.advice || []).filter(a => !ADVICE_PRESETS.some(p => p.en === a))} onChange={x => set('advice', [...(data.advice || []).filter(a => ADVICE_PRESETS.some(p => p.en === a)), ...x])} placeholder="Other advice, press Enter" />
-        </fieldset>
-      </div>
-        </div>
-      </details>
-
-      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Follow-up</span></div>
-        <div className="row wrap"><div className="chips">{[0, 3, 5, 7, 10, 14, 30, 60, 90].map(d => <button key={d} type="button" className={'chip' + ((data.follow_up?.days || 0) === d ? ' on' : '')} onClick={() => set('follow_up', { ...(data.follow_up || {}), days: d || null })}>{d ? (d < 30 ? `${d} days` : `${d / 30} month${d > 30 ? 's' : ''}`) : 'None'}</button>)}</div>
-          <label className="row" style={{ gap: 6 }}><input className="inp sm" style={{ width: 84 }} inputMode="numeric" placeholder="days" aria-label="Follow-up after (days)" title="Type any number of days" value={data.follow_up?.days ?? ''} onChange={e => { const n = parseInt(e.target.value.replace(/\D/g, '')); set('follow_up', { ...(data.follow_up || {}), days: n ? Math.min(365, n) : null }) }} /><span className="small muted">days</span></label>
-          <input className="inp sm" style={{ width: 190 }} placeholder="Note, e.g. bring reports" value={data.follow_up?.note || ''} onChange={e => set('follow_up', { ...(data.follow_up || {}), note: e.target.value })} /></div>
-      </fieldset>
-
+  const examSection = <>
       <details className="sec">
         <summary><h3>Examination, history and addiction</h3><span className="small muted">{[EXAM_SIGNS.filter(e => data.exam?.[e.key] && data.exam[e.key] !== 'Absent').map(e => e.label).join(', '), COMORBIDITIES.filter(c => data.comorbid?.[c.key]).map(c => c.label).join(', ')].filter(Boolean).join(' · ') || 'Optional detail'}</span></summary>
         <fieldset className="sec-b fs" disabled={ro}>
@@ -224,6 +152,78 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
           <textarea className="inp sm" rows={2} aria-label="Addiction details" placeholder="Addiction details (e.g. 10 cigarettes/day for 15 years, quit 2 years ago)" value={data.addiction_note || ''} maxLength={500} onChange={e => set('addiction_note', e.target.value)} />
         </fieldset>
       </details>
+  </>
+  const paper = <ParchiPreview s={s} patient={patient} data={data} meds={meds} date={d10(b.rx.rx_date)} draft={!final} token={b.visit?.token} />
+  return <>
+    <div className="opd-main">
+      <div className="pt-head">
+        <div>
+          <div className="pt-name">{patient.name}</div>
+          <div className="pt-meta">{ageSex(patient)} · {b.visit ? `Token ${b.visit.token} · ` : ''}{patient.uhid}{patient.phone ? ` · ${patient.phone}` : ' · no mobile'}</div>
+          <div className="pt-tags">
+            {(patient.conditions || []).map((c: string) => <span key={c} className="tag ink">{c}</span>)}
+            {(patient.allergies || []).map((a: string) => <span key={a} className="tag red">Allergic: {a}</span>)}
+            {!patient.conditions?.length && !patient.allergies?.length && <span className="tag">No known conditions</span>}
+            <button className="btn sm ghost" onClick={() => setEditPt(true)}><Icon n="edit" />Edit</button>
+          </div>
+        </div>
+        <div className="row">
+          {elapsed != null && <div className="timer"><span className="mono">{fmtT(elapsed)}</span><small>{final ? 'final time' : 'time on this parchi'}</small></div>}
+          {!final && <span className={'savebadge' + (saved !== 'saved' ? ' dirty' : '')}><i />{saved === 'saved' ? 'Saved' : saved === 'saving' ? 'Saving…' : 'Unsaved'}</span>}
+        </div>
+      </div>
+      {(() => { const val = parchiValidity(lastFinal?.rx_date, d10(b.rx.rx_date)); return val && lastFinal ? <div className="alert ok"><b>Parchi valid</b><span>Last prescription {val.ago === 0 ? 'today' : val.ago === 1 ? 'yesterday' : `${val.ago} days ago`} ({fmtDate(d10(lastFinal.rx_date))}). It is valid for {PARCHI_VALID_DAYS} days, until {fmtDate(val.till)} ({val.daysLeft} day{val.daysLeft === 1 ? '' : 's'} left).</span></div> : null })()}
+      {summary && <div className="summary"><b>Summary of past visits:</b> {summary} {lastFinal && !ro && <button className="btn sm" style={{ marginLeft: 6 }} onClick={() => repeat(lastFinal)}>Repeat medicines</button>}</div>}
+      {(hist?.prescriptions || []).length > 1 && <PreviousParchis items={hist!.prescriptions} exclude={rxId} onOpen={setPeek} />}
+      {final && <div className="alert ok"><b>Final.</b><span className="grow">Print it, send it on WhatsApp, or call the next patient.</span><button className="btn sm" onClick={reopen}>Reopen to edit</button></div>}
+
+      {!ro && <div className="tools">
+        <button className="tool" onClick={() => setVoice(true)}><span className="ic"><Icon n="mic" /></span><span><b>Speak the consult</b><span>{me.features.ai ? 'Hinglish voice to a draft prescription' : 'Voice to a basic draft (add a free Groq key for AI)'}</span></span></button>
+        <button className="tool" onClick={() => setScan(true)} disabled={!me.features.ai}><span className="ic"><Icon n="cam" /></span><span><b>Scan old parchi or report</b><span>Photo to medicines and lab values</span></span></button>
+      </div>}
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-co">Complaints</label></div>
+        <textarea id="in-co" className="inp" rows={2} value={data.complaints || ''} onChange={e => set('complaints', e.target.value)} placeholder="e.g. Fever with chills for 3 days" />
+        <div className="chips">{['Fever', 'Cough', 'Cold', 'Body ache', 'Headache', 'Burning urination', 'Acidity', 'Loose motions', 'Vomiting', 'Giddiness', 'Weakness', 'Breathlessness', 'Chest pain', 'Sugar follow-up', 'BP check'].map(c => <button key={c} type="button" className="chip" onClick={() => set('complaints', data.complaints ? data.complaints.replace(/\.?\s*$/, ', ') + c.toLowerCase() : c)}>+ {c}</button>)}</div>
+      </fieldset>
+
+      <details className="sec">
+        <summary><h3>Vitals</h3><span className="small muted">{[v.bp && `BP ${v.bp}`, v.pulse && `Pulse ${v.pulse}`, v.temp && `Temp ${v.temp}`, v.spo2 && `SpO₂ ${v.spo2}`, v.grbs && `GRBS ${v.grbs}`, v.weight && `${v.weight} kg`].filter(Boolean).join(' · ') || 'Not recorded yet'}</span></summary>
+      <fieldset className="sec-b fs" disabled={ro}>
+        <div className="vitals">{([['bp', 'BP', '120/80'], ['pulse', 'Pulse', '72'], ['temp', 'Temp °F', '98.6'], ['spo2', 'SpO₂ %', '98'], ['rr', 'RR', '16'], ['grbs', 'GRBS', '110'], ['weight', 'Weight kg', '60']] as const).map(([k, l, ph]) =>
+          <Field key={k} label={l}><input className={'inp sm mono ' + vitalFlag(k, v[k])} value={v[k] || ''} placeholder={ph} inputMode={k === 'bp' ? 'text' : 'decimal'} onChange={e => setV(k, e.target.value)} /></Field>)}</div>
+      </fieldset>
+      </details>
+
+      {examSection}
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><label htmlFor="in-dx">Diagnosis · one-tap templates</label>{!ro && <span className="row"><button type="button" className="btn sm ghost" onClick={saveAsTemplate}><Icon n="plus" />Save this as a template</button><Link className="btn sm ghost" to="/settings/templates">Edit templates</Link></span>}</div>
+        <div className="chips">{templates.map(t => <button key={t.id} type="button" className="chip" onClick={() => applyTemplate(t)}>{t.name} <span className="faint tiny">{t.data.meds.length} Rx</span></button>)}</div>
+        <input id="in-dx" className="inp" value={data.diagnosis || ''} onChange={e => set('diagnosis', e.target.value)} placeholder="Provisional diagnosis" />
+      </fieldset>
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Investigations</span>{(data.investigations || []).length > 0 && <span className="small muted">{(data.investigations || []).length} test{(data.investigations || []).length > 1 ? 's' : ''}</span>}</div>
+        <TagInput value={data.investigations || []} onChange={x => set('investigations', x)} placeholder="Add a test" suggestions={COMMON_INVESTIGATIONS.slice(0, 18)} />
+      </fieldset>
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Medicines</span></div>
+        {!ro && regular.length > 0 && <div className="chips" aria-label="Regular medicines"><span className="lbl" style={{ alignSelf: 'center' }}>★ Regular</span>{regular.map(r => <button key={r.name} type="button" className="chip" onClick={() => setMeds(ms => ms.some(m => m.name === r.name) ? ms : [...ms, medFromHit({ name: r.name, defaults: r.defaults })])}>+ {r.name}</button>)}</div>}
+        {!ro && <MedSearch onPick={m => setMeds(ms => [...ms, m])} />}
+        {meds.length === 0 ? <p className="small muted">Tap a template, search for a medicine, or speak the consult.</p> :
+          <div>{meds.map((m, i) => <MedRow key={i} i={i} m={m} ro={ro} regular={isRegular(m.name)} onStar={() => toggleRegular(m)} alerted={alerts.some(a => a.med === i && a.level === 'crit')} set={p => setMed(i, p)} remove={() => setMeds(ms => ms.filter((_, j) => j !== i))} move={d => setMeds(ms => { const n = [...ms]; const j = i + d; if (j < 0 || j >= n.length) return ms; [n[i], n[j]] = [n[j], n[i]]; return n })} />)}</div>}
+        {alerts.map((a, i) => <div key={i} className={'alert ' + a.level}><b>{a.level === 'crit' ? 'Stop' : a.level === 'warn' ? 'Check' : 'Note'}</b><span>{a.text}</span></div>)}
+      </fieldset>
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Advice (English + हिंदी)</span>{(data.advice || []).length > 0 && <span className="small muted">{(data.advice || []).length} added</span>}</div>
+        <div className="chips">{ADVICE_PRESETS.map(a => { const on = (data.advice || []).includes(a.en); return <button key={a.en} type="button" title={a.hi} className={'chip' + (on ? ' on' : '')} onClick={() => set('advice', on ? data.advice!.filter(x => x !== a.en) : [...(data.advice || []), a.en])}>{a.en}</button> })}</div>
+        <TagInput value={(data.advice || []).filter(a => !ADVICE_PRESETS.some(p => p.en === a))} onChange={x => set('advice', [...(data.advice || []).filter(a => ADVICE_PRESETS.some(p => p.en === a)), ...x])} placeholder="Other advice, press Enter" />
+      </fieldset>
+
+      <fieldset className="fs" disabled={ro}><div className="fs-h"><span className="lbl">Follow-up</span></div>
+        <div className="row wrap"><div className="chips">{[0, 3, 5, 7, 10, 14, 30, 60, 90].map(d => <button key={d} type="button" className={'chip' + ((data.follow_up?.days || 0) === d ? ' on' : '')} onClick={() => set('follow_up', { ...(data.follow_up || {}), days: d || null })}>{d ? (d < 30 ? `${d} days` : `${d / 30} month${d > 30 ? 's' : ''}`) : 'None'}</button>)}</div>
+          <label className="row" style={{ gap: 6 }}><input className="inp sm" style={{ width: 84 }} inputMode="numeric" placeholder="days" aria-label="Follow-up after (days)" title="Type any number of days" value={data.follow_up?.days ?? ''} onChange={e => { const n = parseInt(e.target.value.replace(/\D/g, '')); set('follow_up', { ...(data.follow_up || {}), days: n ? Math.min(365, n) : null }) }} /><span className="small muted">days</span></label>
+          <input className="inp sm" style={{ width: 190 }} placeholder="Note, e.g. bring reports" value={data.follow_up?.note || ''} onChange={e => set('follow_up', { ...(data.follow_up || {}), note: e.target.value })} /></div>
+      </fieldset>
 
       <div className="opd-actions">
         <label className="check"><input type="checkbox" checked={data.hindi !== false} disabled={ro} onChange={e => set('hindi', e.target.checked)} />Hindi line for patient</label>
@@ -235,7 +235,8 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
       </div>
     </div>
     {renderSide(<>
-      <div className="side-h"><b>Live parchi</b><span className="tag ink">{final ? 'final' : 'updates as you type'}</span></div>
+      <div className="side-h"><b>Live parchi</b><span className="tag ink">{final ? 'final' : 'updates as you type'}</span><span className="grow" />
+        {final && <button className="btn sm" onClick={reopen} title="Reopen this parchi and change it"><Icon n="edit" />Edit</button>}</div>
       <div className="paper-scroll">{paper}</div>
       {final && <div className="row wrap"><button className="btn sm" onClick={() => out.download(`Parchi-${patient.name.replace(/\W+/g, '_')}-${d10(b.rx.rx_date)}.pdf`)}><Icon n="down" />Download PDF</button><span className="small muted">{out.busy ? 'Making PDF…' : out.made ? 'PDF ready for WhatsApp' : ''}</span></div>}
     </>)}
@@ -268,6 +269,7 @@ export default function ConsultPane({ rxId, onChanged, onNext, renderSide }: { r
     {wa && <WhatsAppPreview rxId={rxId} patient={patient} meds={meds} advice={data.advice || []} followDays={data.follow_up?.days} rxDate={d10(b.rx.rx_date)} ensurePdf={out.ensurePdf} onClose={() => setWa(false)} />}
     {bill && <BillDialog patient={{ id: patient.id, name: patient.name }} visit={b.visit} onClose={() => setBill(false)} onDone={id => { setBill(false); setReceipt(id); api<Hist>(`/patients/${patient.id}`).then(setHist); onChanged() }} />}
     {receipt && <ReceiptDialog billId={receipt} onClose={() => setReceipt(null)} onChange={onChanged} />}
+    {peek && <ParchiViewDialog rxId={peek} onClose={() => setPeek(null)} onReuse={ro ? undefined : () => { const p = hist?.prescriptions.find(x => x.id === peek); if (p) { repeat(p); setPeek(null) } }} />}
   </>
 }
 

@@ -9,6 +9,7 @@ import Icon from '../components/Icon'
 import TrendChart from '../components/TrendChart'
 import { EditPatient } from './Consult'
 import { ScanDialog } from '../components/AiDialogs'
+import { ParchiViewDialog } from '../components/ParchiView'
 import { BILLING_ENABLED } from '../lib/features'
 import { BillDialog } from '../components/BillDialog'
 import { ReceiptDialog } from '../components/Receipt'
@@ -18,7 +19,7 @@ const TARGETS: Record<string, { hi?: number; lo?: number; unit: string }> = { Hb
 export default function PatientPage({ id: pid }: { id?: string }) {
   const params = useParams(), id = pid || params.id, me = useMe(), toast = useToast(), nav = useNavigate()
   const d = useAsync(() => api<any>(`/patients/${id}`), [id])
-  const [edit, setEdit] = useState(false), [scan, setScan] = useState(false), [lab, setLab] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null)
+  const [edit, setEdit] = useState(false), [scan, setScan] = useState(false), [lab, setLab] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [peek, setPeek] = useState<string | null>(null)
   const series = useMemo(() => {
     const m = new Map<string, { date: string; value: number }[]>()
     for (const l of d.data?.labs || []) if (l.value_num != null) { const k = l.test; if (!m.has(k)) m.set(k, []); m.get(k)!.push({ date: d10(l.result_date), value: l.value_num }) }
@@ -51,11 +52,14 @@ export default function PatientPage({ id: pid }: { id?: string }) {
       <section className="card stack">
         <div className="fs-h"><span className="lbl">Visit history</span><span className="small muted">{visits.length} visit{visits.length === 1 ? '' : 's'} · {prescriptions.length} prescription{prescriptions.length === 1 ? '' : 's'}</span></div>
         {history.length === 0 ? <div className="timeline"><div className="tl"><b>First visit</b><p>No earlier records. Use photo intake to add old prescriptions.</p></div></div> :
-          <div className="timeline">{history.map((h: any) => h.kind === 'rx' ? <Link key={h.r.id} to={h.r.status === 'final' ? `/rx/${h.r.id}` : `/opd/${h.r.id}`} className="tl" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-            <div className="d">{fmtDate(d10(h.r.rx_date))}{h.r.status !== 'final' ? ' · draft' : ''}{h.r.imported ? ' · from old app' : ''}</div>
-            <b>{h.r.diagnosis || h.r.complaints || 'No diagnosis written'}</b>
-            <p>{(h.r.meds || []).map((m: any) => m.name).join(', ') || 'No medicines'}{h.r.vitals?.bp ? ` · BP ${h.r.vitals.bp}` : ''}{h.r.vitals?.grbs ? ` · GRBS ${h.r.vitals.grbs}` : ''}</p>
-          </Link> : <div key={h.v.id} className="tl visit-only">
+          <div className="timeline">{history.map((h: any) => h.kind === 'rx' ? <div key={h.r.id} className="tl">
+            <div className="d row" style={{ gap: 8 }}><span className="grow">{fmtDate(d10(h.r.rx_date))}{h.r.status !== 'final' ? ' · draft' : ''}{h.r.imported ? ' · from old app' : ''}</span>
+              <button className="btn sm ghost" title="Show this parchi without opening it" onClick={() => setPeek(h.r.id)}><Icon n="file" />Show parchi</button></div>
+            <Link to={h.r.status === 'final' ? `/rx/${h.r.id}` : `/opd/${h.r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              <b>{h.r.diagnosis || h.r.complaints || 'No diagnosis written'}</b>
+              <p>{(h.r.meds || []).map((m: any) => m.name).join(', ') || 'No medicines'}{h.r.vitals?.bp ? ` · BP ${h.r.vitals.bp}` : ''}{h.r.vitals?.grbs ? ` · GRBS ${h.r.vitals.grbs}` : ''}</p>
+            </Link>
+          </div> : <div key={h.v.id} className="tl visit-only">
             <div className="d">{fmtDate(d10(h.v.visit_date))}{h.v.source === 'opd_register' ? ' · OPD register' : h.v.status !== 'done' ? ' · ' + (h.v.status === 'waiting' ? 'waiting' : 'with doctor') : ''}</div>
             <b>{h.v.visit_type === 'new' ? 'First visit' : 'Follow-up visit'}{h.v.vitals?.session ? (h.v.vitals.session === 'am' ? ', morning' : ', evening') : ''}</b>
             <p>{[h.v.complaint, h.v.vitals?.weight ? `Weight ${h.v.vitals.weight} kg` : '', h.v.source === 'opd_register' && !h.v.complaint ? 'Seen before Arogya Rx; no prescription on record' : ''].filter(Boolean).join(' · ') || 'No prescription written for this visit'}</p>
@@ -81,6 +85,7 @@ export default function PatientPage({ id: pid }: { id?: string }) {
     {lab && <LabDialog pid={p.id} onClose={() => setLab(false)} onDone={() => { setLab(false); d.reload() }} />}
     {bill && <BillDialog patient={{ id: p.id, name: p.name }} onClose={() => setBill(false)} onDone={id => { setBill(false); setReceipt(id); d.reload() }} />}
     {receipt && <ReceiptDialog billId={receipt} onClose={() => setReceipt(null)} onChange={d.reload} />}
+    {peek && <ParchiViewDialog rxId={peek} onClose={() => setPeek(null)} />}
   </div>
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { useMe } from '../lib/session'
 import { addDaysISO, istToday, dayName, fmtDate } from '../lib/format'
@@ -12,6 +12,9 @@ export default function Appointments() {
   const [day, setDay] = useState(istToday()), [adding, setAdding] = useState(false), [moving, setMoving] = useState<Appt | null>(null)
   const list = useAsync(() => api<Appt[]>(`/appointments?from=${day}&to=${day}`), [day])
   const week = useAsync(() => api<Appt[]>(`/appointments?from=${istToday()}&to=${addDaysISO(istToday(), 13)}`), [])
+  // Online bookings arrive while nobody is at the screen. Show them once, then mark them seen.
+  const [unseen, setUnseen] = useState<Appt[]>([])
+  useEffect(() => { api<Appt[]>('/appointments/unseen').then(x => { if (x.length) { setUnseen(x); api('/appointments/seen', { method: 'POST' }).catch(() => {}) } }).catch(() => {}) }, [])
   const counts = new Map<string, number>(); (week.data || []).filter(a => a.status === 'booked').forEach(a => counts.set(String(a.appt_date).slice(0, 10), (counts.get(String(a.appt_date).slice(0, 10)) || 0) + 1))
   const reload = () => { list.reload(); week.reload() }
   const act = async (a: Appt, path: string, body?: object, msg?: string) => { try { await api(`/appointments/${a.id}${path}`, { method: path ? 'POST' : 'PATCH', body }); if (msg) toast(msg, 'ok'); reload() } catch (e: any) { toast(e.message, 'err') } }
@@ -20,6 +23,9 @@ export default function Appointments() {
   return <div className="stack">
     <div className="page-h"><div className="grow"><h1>Schedule</h1><p>Phone, website and WhatsApp bookings, and follow-ups from prescriptions.</p></div><button className="btn" onClick={() => { const l = `${location.origin}/book/${me.clinic.slug}`; (navigator.clipboard?.writeText(l) || Promise.reject()).then(() => toast('Booking link copied. Share it on WhatsApp and Google.', 'ok'), () => toast(l, 'info')) }}><Icon n="copy" />Booking link</button><button className="btn primary" onClick={() => setAdding(true)}><Icon n="plus" />Book appointment</button></div>
     <div className="days" role="group" aria-label="Day">{days.map(d => <button key={d} className="day" aria-pressed={d === day} onClick={() => setDay(d)}><span className="tiny">{d === istToday() ? 'Today' : dayName(d).split(' ')[0]}</span><b>{+d.slice(8)}</b><span className="tiny">{counts.get(d) ? `${counts.get(d)} booked` : '—'}</span></button>)}</div>
+    {unseen.length > 0 && <div className="alert info"><Icon n="bell" size={18} /><span className="grow"><b>{unseen.length} new online booking{unseen.length > 1 ? 's' : ''}</b>{' '}
+      {unseen.slice(0, 4).map(a => `${a.name} (${fmtDate(String(a.appt_date).slice(0, 10))}${a.time ? ', ' + a.time : ''})`).join(', ')}{unseen.length > 4 ? ` and ${unseen.length - 4} more` : ''}</span>
+      <button className="btn sm" onClick={() => setUnseen([])}>Got it</button></div>}
     <div className="card flush">
       {list.loading && !list.data ? <Spinner /> : (list.data || []).length === 0 ? <div className="empty"><b>No appointments on {dayName(day)}</b>Book one, or share the online booking link.</div> :
         <div className="list">{list.data!.map(a => <div key={a.id} className="li" style={{ opacity: a.status === 'cancelled' || a.status === 'no_show' ? .55 : 1 }}>
@@ -45,9 +51,12 @@ function ApptDialog({ date, appt, onClose, onDone }: { date: string; appt?: Appt
   const slots = useAsync(() => api<{ closed: boolean; slots: { time: string; session: string; free: number; past: boolean }[] }>(`/appointments/slots?date=${f.date}`), [f.date])
   const save = async () => {
     try {
-      if (appt) await api(`/appointments/${appt.id}`, { method: 'PATCH', body: { date: f.date, time: f.time || null } })
-      else await api('/appointments', { body: { name: f.name, phone: f.phone, date: f.date, time: f.time || null, reason: f.reason || undefined, age_years: f.age_years ? +f.age_years : null } })
-      toast(appt ? 'Appointment moved' : 'Appointment booked', 'ok'); onDone()
+      if (appt) { await api(`/appointments/${appt.id}`, { method: 'PATCH', body: { date: f.date, time: f.time || null } }); toast('Appointment moved', 'ok'); onDone(); return }
+      const r = await api<{ whatsapp?: { sent: boolean; url?: string } | null }>('/appointments', { body: { name: f.name, phone: f.phone, date: f.date, time: f.time || null, reason: f.reason || undefined, age_years: f.age_years ? +f.age_years : null } })
+      if (r.whatsapp?.sent) toast('Booked. Confirmation sent on WhatsApp.', 'ok')
+      else if (r.whatsapp?.url) { toast('Booked. WhatsApp is open with the confirmation written \u2014 press send.', 'ok'); window.open(r.whatsapp.url, '_blank') }
+      else toast('Appointment booked', 'ok')
+      onDone()
     } catch (e: any) { toast(e.message, 'err') }
   }
   return <Modal title={appt ? `Move ${appt.name}` : 'Book appointment'} width={640} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!appt && (f.name.length < 2 || f.phone.replace(/\D/g, '').length < 10)} onClick={save}>{appt ? 'Move appointment' : 'Book'}</button></>}>

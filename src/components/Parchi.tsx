@@ -24,8 +24,19 @@ export default function Parchi({ s, patient, data, meds, date, draft, token }: {
   const conds = COMORBIDITIES.filter(c => data.comorbid?.[c.key]).map(c => c.label)
   const sex = patient.sex === 'M' ? 'M' : patient.sex === 'F' ? 'F' : patient.sex ? 'O' : '—'
   const logo = L.logo_file_id ? <img src={fileUrl(L.logo_file_id)} alt="" /> : L.use_letterhead_art ? <img src="/lh/logo.png" alt="" /> : '℞'
+  // Each area that has its own colour or font sets a variable; anything left blank falls back in CSS
+  // to the single ink colour and the page font, which is how the parchi looked before these existed.
+  const C = L.colors || ({} as any), F = L.fonts || ({} as any)
+  const vars: Record<string, string> = { '--lh': L.ink }
+  const put = (k: string, v?: string | null) => { if (v) vars[k] = v }
+  put('--c-head', C.header); put('--c-h5', C.headings); put('--c-hi', C.hindi); put('--c-sign', C.signature); put('--c-foot', C.footer)
+  for (const [key, v] of [['body', 'body'], ['clinic', 'clinic'], ['doc', 'doctor'], ['head', 'headings'], ['med', 'medicines'], ['hi', 'hindi'], ['sign', 'signature']] as const) {
+    put(`--f-${key}`, F[v]?.family)
+    if (F[v]?.scale && F[v].scale !== 1) vars[`--z-${key}`] = String(F[v].scale)
+  }
+  if (L.signature_height_mm && L.signature_height_mm !== 10) vars['--sign-h'] = `${L.signature_height_mm}mm`
   return (
-    <div className={'parchi' + (L.paper === 'A4' ? ' a4' : '')} style={{ ['--lh' as any]: L.ink }}>
+    <div className={'parchi' + (L.paper === 'A4' ? ' a4' : '')} style={vars as any}>
       {draft && <div className="wm">DRAFT</div>}
       {L.layout === 'left'
         ? <div className="lh left"><div className="lh-logo">{logo}</div><div>
@@ -70,7 +81,10 @@ export default function Parchi({ s, patient, data, meds, date, draft, token }: {
       </div>
       <div className="pfu">
         <div className="fu">{fuDate ? <>Follow-up: {fmtDate(fuDate)}{hindi ? <span style={{ color: 'var(--lh)' }}> ({fmtDateHi(fuDate)} को दिखाएँ)</span> : null}</> : ''}{data.follow_up?.note ? <div style={{ fontWeight: 400 }}>{data.follow_up.note}</div> : null}</div>
-        <div className="sign">{L.signature_file_id ? <img src={fileUrl(L.signature_file_id)} alt="" /> : <div className="s">{L.signature_name}</div>}<div className="l">{L.doctor_en} · {L.reg_no}</div></div>
+        <div className="sign">{L.signature_file_id ? <img src={fileUrl(L.signature_file_id)} alt="" /> : <div className="s">{L.signature_name}</div>}
+          <div className="l">{L.doctor_en} · {L.reg_no}</div>
+          {L.show_signature_quals && L.signature_quals ? <div className="q">{L.signature_quals}</div> : null}
+          {L.dsc_note ? <div className="dsc">{L.dsc_note}</div> : null}</div>
       </div>
       <div className="pfoot"><span>Generic names as per NMC guidance · Valid for {L.validity_days} days</span><span>Made with Arogya Rx</span></div>
     </div>

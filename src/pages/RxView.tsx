@@ -67,7 +67,14 @@ export default function RxView() {
     {isNew && final && <div className="alert ok"><b>Finalised.</b><span>Print it or send it on WhatsApp. {pdfBusy ? 'Making the PDF…' : b.rx.pdf_file_id ? 'PDF ready.' : ''}</span></div>}
     {!final && <div className="alert warn"><b>Draft.</b><span>This prescription is not final yet.</span>{isDoc && <Link className="btn sm right" to={`/opd/${id}`}>Continue editing</Link>}</div>}
     <div className="consult">
-      <div className="paper-scroll" style={{ maxHeight: 'none' }}><ParchiPreview s={me.clinic.settings} patient={p} data={b.rx.data} meds={b.rx.meds} date={d10(b.rx.rx_date)} draft={!final} token={b.visit?.token} /></div>
+      <div className="stack tight">
+        <div className="side-h"><b>Parchi</b><span className="tag ink">{final ? 'final' : 'draft'}</span><span className="grow" />
+          {isDoc && (final
+            ? <button className="btn sm" onClick={reopen} title="Reopen this parchi and change it"><Icon n="edit" />Edit</button>
+            : <Link className="btn sm" to={`/opd/${id}`}><Icon n="edit" />Edit</Link>)}
+        </div>
+        <div className="paper-scroll" style={{ maxHeight: 'none' }}><ParchiPreview s={me.clinic.settings} patient={p} data={b.rx.data} meds={b.rx.meds} date={d10(b.rx.rx_date)} draft={!final} token={b.visit?.token} /></div>
+      </div>
       <div className="paper-col">
         {final && <div className="card stack">
           <button className="btn primary lg" onClick={() => printOnly('rx', me.clinic.settings.letterhead.paper)}><Icon n="print" />Print {me.clinic.settings.letterhead.paper}</button>

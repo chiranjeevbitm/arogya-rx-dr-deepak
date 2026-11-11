@@ -10,7 +10,7 @@ import { liveSpeech } from '../lib/media'
 import Recordings from '../components/Recordings'
 import { ParchiPreview } from '../components/Parchi'
 import MedSearch from '../components/MedSearch'
-import { mergeSettings, type ClinicSettings } from '../../shared/settings'
+import { mergeSettings, PARCHI_FONTS, type ClinicSettings } from '../../shared/settings'
 import { sigEn, FREQS, type Med } from '../../shared/rx'
 
 const SAMPLE = { patient: { name: 'Ramesh Prasad', age_years: 52, sex: 'M', address: 'Ahiyapur, Muzaffarpur', uhid: 'AC-00012', allergies: [] as string[] },
@@ -68,15 +68,87 @@ function Letterhead() {
             <label className="btn sm"><Icon n="cam" />Upload logo<input type="file" accept="image/*" hidden onChange={e => upload('logo', e.target.files?.[0])} /></label>
             <label className="check small"><input type="checkbox" checked={L.use_letterhead_art} onChange={e => set('use_letterhead_art', e.target.checked)} />Use the Arogya Clinic logo</label>
             {L.logo_file_id && <><img src={fileUrl(L.logo_file_id)} alt="" style={{ height: 32 }} /><button type="button" className="btn sm ghost" onClick={() => set('logo_file_id', null)}>Remove</button></>}</div></div>
-          <div className="field"><label>Signature image (optional)</label><div className="row wrap">
+          <div className="field full"><label>Signature image (optional)</label><div className="row wrap">
             <label className="btn sm"><Icon n="edit" />Upload signature<input type="file" accept="image/*" hidden onChange={e => upload('signature', e.target.files?.[0])} /></label>
-            {L.signature_file_id && <><img src={fileUrl(L.signature_file_id)} alt="" style={{ height: 32 }} /><button type="button" className="btn sm ghost" onClick={() => set('signature_file_id', null)}>Remove</button></>}</div></div>
+            {L.signature_file_id && <><img src={fileUrl(L.signature_file_id)} alt="" style={{ height: 32 }} /><button type="button" className="btn sm ghost" onClick={() => set('signature_file_id', null)}>Remove</button></>}
+            <span className="small muted">A photo of the signature on white paper works; it replaces the typed name.</span></div></div>
+          <div className="field"><label htmlFor="lh-sigh">Signature height (mm)</label><input id="lh-sigh" className="inp" inputMode="decimal" value={L.signature_height_mm} onChange={e => set('signature_height_mm', Math.min(30, Math.max(4, parseFloat(e.target.value) || 10)))} /></div>
+          <div className="field"><label>Degrees under the signature</label><label className="check"><input type="checkbox" checked={L.show_signature_quals} onChange={e => set('show_signature_quals', e.target.checked)} />Print them</label></div>
+          {T('signature_quals', 'Degrees line', true)}
+          {T('dsc_note', 'Digital signature note (printed under the signature)', true)}
         </form>
+        <ColourStudio L={L} set={set} />
+        <FontStudio L={L} set={set} />
         <SaveBar dirty={dirty} save={save} busy={busy} />
       </div>
       <div className="paper-col"><div className="side-h"><b>Live parchi</b><span className="tag ink">sample patient</span></div><div className="paper-scroll"><ParchiPreview key={L.paper} s={s} patient={SAMPLE.patient} data={SAMPLE.data} meds={SAMPLE.meds} date={istToday()} token={3} /></div></div>
     </div>
   </div>
+}
+
+type LH = ClinicSettings['letterhead']
+type SetLH = (k: keyof LH, v: any) => void
+
+const COLOUR_AREAS: { key: keyof ClinicSettings['letterhead']['colors']; label: string; hint: string }[] = [
+  { key: 'header', label: 'Letterhead', hint: 'Clinic name, logo ring and the line under the header' },
+  { key: 'headings', label: 'Section headings', hint: 'C/O, O/E, Diagnosis, Investigations, Advice and the ℞ mark' },
+  { key: 'hindi', label: 'Hindi lines', hint: 'The Hindi dose line under each medicine and Hindi advice' },
+  { key: 'signature', label: 'Signature', hint: 'The signature name (an uploaded image keeps its own colour)' },
+  { key: 'footer', label: 'Footer', hint: 'The small line at the bottom of the page' },
+]
+
+/** One colour per area of the parchi. Blank means "follow the ink colour", so the page looks
+    exactly as it did before any of this was touched. */
+function ColourStudio({ L, set }: { L: LH; set: SetLH }) {
+  const C = L.colors
+  const put = (k: keyof ClinicSettings['letterhead']['colors'], v: string) => set('colors', { ...C, [k]: v })
+  const anySet = COLOUR_AREAS.some(a => C[a.key])
+  return <details className="sec" open={anySet}>
+    <summary><h3>Colours by section</h3><span className="small muted">{anySet ? `${COLOUR_AREAS.filter(a => C[a.key]).length} section${COLOUR_AREAS.filter(a => C[a.key]).length > 1 ? 's' : ''} with their own colour` : 'All following the ink colour'}</span></summary>
+    <div className="sec-b stack">
+      <p className="small muted" style={{ margin: 0 }}>The ink colour above moves every section at once. Set a colour here and that section stops following it; press “Follow ink” to put it back.</p>
+      {COLOUR_AREAS.map(a => <div key={a.key} className="row wrap" style={{ gap: 10 }}>
+        <span style={{ minWidth: 140 }}><b className="small">{a.label}</b><br /><span className="tiny muted">{a.hint}</span></span>
+        <div className="swatches">{INKS.map(k => <button type="button" key={k[0]} className="sw" style={{ background: k[0] }} aria-label={`${a.label}: ${k[1]}`} title={k[1]} aria-pressed={C[a.key] === k[0]} onClick={() => put(a.key, k[0])} />)}</div>
+        <input type="color" aria-label={`${a.label}: custom colour`} value={C[a.key] || L.ink} onChange={e => put(a.key, e.target.value)} style={{ width: 32, height: 32, padding: 0, border: 0, background: 'none' }} />
+        {C[a.key] ? <button type="button" className="btn sm ghost" onClick={() => put(a.key, '')}>Follow ink</button> : <span className="tag">Following ink</span>}
+      </div>)}
+      {anySet && <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => set('colors', { header: '', headings: '', hindi: '', signature: '', footer: '' })}>Put every section back on the ink colour</button>}
+    </div>
+  </details>
+}
+
+const FONT_AREAS: { key: keyof ClinicSettings['letterhead']['fonts']; label: string; hint: string }[] = [
+  { key: 'body', label: 'Whole page', hint: 'Everything that has no font of its own' },
+  { key: 'clinic', label: 'Clinic name', hint: 'The big name at the top' },
+  { key: 'doctor', label: 'Doctor line', hint: "The doctor's name under the clinic name" },
+  { key: 'headings', label: 'Section headings', hint: 'C/O, O/E, Diagnosis and the rest' },
+  { key: 'medicines', label: 'Medicine names', hint: 'The numbered list on the right' },
+  { key: 'hindi', label: 'Hindi lines', hint: 'Hindi dose lines and Hindi advice' },
+  { key: 'signature', label: 'Signature', hint: 'The typed signature name' },
+]
+const SCALES: [number, string][] = [[0.85, 'Smaller'], [0.92, 'Slightly smaller'], [1, 'Normal'], [1.1, 'Slightly bigger'], [1.25, 'Bigger'], [1.4, 'Largest']]
+
+/** Font family and size for one area at a time. The first four families are built into the app,
+    so they print the same on the clinic computer even with no internet. */
+function FontStudio({ L, set }: { L: LH; set: SetLH }) {
+  const F = L.fonts
+  const put = (k: keyof ClinicSettings['letterhead']['fonts'], v: Partial<{ family: string; scale: number }>) => set('fonts', { ...F, [k]: { ...F[k], ...v } })
+  return <details className="sec">
+    <summary><h3>Fonts by section</h3><span className="small muted">Pick a different font or size for one part of the parchi</span></summary>
+    <div className="sec-b stack">
+      <p className="small muted" style={{ margin: 0 }}>The first five fonts come with the app and print the same even when the internet is down. The rest use whatever the computer has.</p>
+      {FONT_AREAS.map(a => <div key={a.key} className="row wrap" style={{ gap: 10 }}>
+        <span style={{ minWidth: 140 }}><b className="small">{a.label}</b><br /><span className="tiny muted">{a.hint}</span></span>
+        <select className="inp sm" style={{ flex: '1 1 200px', minWidth: 0, fontFamily: F[a.key].family || undefined }} aria-label={`${a.label}: font`} value={F[a.key].family} onChange={e => put(a.key, { family: e.target.value })}>
+          {PARCHI_FONTS.map(f => <option key={f.label} value={f.value} style={{ fontFamily: f.value || undefined }}>{f.label}</option>)}
+        </select>
+        <select className="inp sm" style={{ width: 150 }} aria-label={`${a.label}: size`} value={F[a.key].scale} onChange={e => put(a.key, { scale: parseFloat(e.target.value) })}>
+          {SCALES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>)}
+    </div>
+  </details>
 }
 
 function ClinicTab() {
@@ -119,8 +191,11 @@ function ClinicTab() {
       <Field label="Note shown to patients"><input className="inp" value={s.booking.note} onChange={e => up(v => ({ ...v, booking: { ...v.booking, note: e.target.value } }))} /></Field>
     </div></section>
     <section className="sec"><div className="sec-h"><h3>WhatsApp</h3></div><div className="sec-b">
-      <Field label="Clinic WhatsApp number" hint="Patients who book online can message this number"><input className="inp" value={s.whatsapp.clinic_number} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, clinic_number: e.target.value.replace(/[^\d]/g, '') } }))} /></Field>
-      <label className="check"><input type="checkbox" checked={s.whatsapp.reminder_day_before} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, reminder_day_before: e.target.checked } }))} />Send follow-up reminders the day before (needs WhatsApp auto-send)</label>
+      <Field label="Clinic WhatsApp number" hint="Patients who book online can message this number, and booking alerts come here"><input className="inp" value={s.whatsapp.clinic_number} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, clinic_number: e.target.value.replace(/[^\d]/g, '') } }))} /></Field>
+      <label className="check"><input type="checkbox" checked={s.whatsapp.confirm_appointments} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, confirm_appointments: e.target.checked } }))} />Confirm every appointment to the patient on WhatsApp</label>
+      <p className="small muted" style={{ margin: '-4px 0 0 26px' }}>With auto-send on it goes by itself. Without it, WhatsApp opens with the Hindi message already written and staff press send.</p>
+      <label className="check"><input type="checkbox" checked={s.whatsapp.alert_clinic_on_booking} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, alert_clinic_on_booking: e.target.checked } }))} />Tell the clinic number when someone books online</label>
+      <label className="check"><input type="checkbox" checked={s.whatsapp.reminder_day_before} onChange={e => up(v => ({ ...v, whatsapp: { ...v.whatsapp, reminder_day_before: e.target.checked } }))} />Remind patients the day before their appointment or follow-up (needs WhatsApp auto-send)</label>
       <Field label="OP number prefix"><input className="inp" style={{ width: 120 }} value={s.uhid_prefix} onChange={e => up(v => ({ ...v, uhid_prefix: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 5) }))} /></Field>
     </div></section>
     <SaveBar dirty={dirty} save={save} busy={busy} />

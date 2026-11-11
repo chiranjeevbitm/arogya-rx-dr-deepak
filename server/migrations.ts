@@ -369,4 +369,15 @@ create policy server_all on arx.recordings to current_user using (true) with che
 do $$ begin if exists (select 1 from pg_roles where rolname = 'anon') then execute 'revoke all on arx.recordings from anon, authenticated'; end if; end $$;
 `,
   },
+  {
+    version: 7,
+    name: 'appointment_seen',
+    // An online booking arrives while nobody is watching the screen, so it stays "not seen"
+    // until someone opens the Schedule page. Bookings made by staff are seen as they are made.
+    sql: /* sql */ `
+alter table arx.appointments add column if not exists seen_at timestamptz;
+update arx.appointments set seen_at = created_at where seen_at is null and source <> 'online';
+create index if not exists appointments_unseen_idx on arx.appointments (clinic_id, seen_at) where seen_at is null;
+`,
+  },
 ]

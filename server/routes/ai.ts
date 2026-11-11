@@ -10,6 +10,7 @@ import { basicParse, trigramSim } from '../../shared/basicRx.js'
 import { saveRecording, RecordingMeta } from './recordings.js'
 import { putFile } from '../lib/storage.js'
 import { detectForm, defaultDose, defaultRoute, normFreq, istToday } from '../../shared/rx.js'
+import { normTest } from './patients.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())
@@ -148,6 +149,12 @@ const SCAN_SCHEMA = S({
   medicines: { type: 'array', items: S({ name: str, dose: str, freq: str, duration: str }) },
   labs: { type: 'array', items: S({ test: str, value: str, unit: str, ref_range: str, flag: { type: 'string', enum: ['low', 'high', 'normal', 'abnormal', ''] } }) },
   notes: str,
+  interpretation: S({
+    summary: { ...str, description: 'Two or three plain sentences on what this report shows overall. Empty for a document that is not a report.' },
+    abnormal: { type: 'array', items: S({ test: str, value: str, note: { ...str, description: 'What this value out of range usually means, in plain words' }, severity: { type: 'string', enum: ['mild', 'moderate', 'marked', ''] } }) },
+    trend: { type: 'array', items: S({ test: str, direction: { type: 'string', enum: ['up', 'down', 'same', ''] }, note: { ...str, description: 'How it compares with the earlier value supplied, and whether that is better or worse' } }) },
+    watch: { type: 'array', items: { ...str, description: 'What to recheck or ask about, and roughly when' } },
+  }),
 })
 const SCAN_SYSTEM = `You read a phone photo of an Indian medical document (an old prescription, usually handwritten on a printed clinic parchi, or a printed lab report) and extract structured data for a doctor to review.
 Rules:
@@ -158,7 +165,9 @@ Rules:
 - diagnoses: the conditions and key findings named (for example "ASD 25 mm ostium secundum", "hypothyroidism", "RBBB"). allergies only if written.
 - Labs: one row per test with value, unit, reference range and flag (low/high/normal) if printed or obvious from the range.
 - doc_date as YYYY-MM-DD from the "Reg. Date" or any printed date (20/10/26 means 2026-10-20).
-- notes: investigation findings (echo, ECG) and referral in one or two lines.`
+- notes: investigation findings (echo, ECG) and referral in one or two lines.
+- interpretation: for a lab report, read the numbers for the doctor. summary is two or three plain sentences on what the report shows. abnormal lists only values outside the printed reference range, with what that value usually means and how far out it is. trend compares each test with the patient's earlier value when earlier values are supplied below, and says whether the change is better or worse. watch lists what to recheck and roughly when.
+- The interpretation is a draft for a qualified doctor who will check it. Describe what the numbers mean; do not prescribe medicines or doses, and do not tell the doctor what to do. Say plainly when a value is unclear or the range is missing rather than guessing. Leave interpretation fields empty for a document that is not a lab report.`
 
 r.post('/scan', async c => {
   const b = await body(c, z.object({ patient_id: z.string().uuid(), image: z.string().max(8_000_000) }))
@@ -170,13 +179,42 @@ r.post('/scan', async c => {
   const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
   if (!p) throw new HttpError(404, 'Patient not found.')
   const file = await putFile({ clinicId: u.clinic_id, kind: 'scan', mime: m[1], data: Buffer.from(m[2], 'base64'), userId: u.id })
+  // The patient's own earlier values, so the report can be read against them instead of in isolation.
+  const prevRows = await sql()`select distinct on (test) test, value_num::float as value_num, value_text, unit, result_date
+    from arx.lab_results where patient_id = ${b.patient_id} and clinic_id = ${u.clinic_id} order by test, result_date desc`
+  const prev = new Map<string, { value: string; unit: string; date: string }>()
+  for (const x of prevRows) prev.set(x.test, { value: x.value_text ?? String(x.value_num ?? ''), unit: x.unit || '', date: String(x.result_date instanceof Date ? x.result_date.toISOString().slice(0, 10) : x.result_date).slice(0, 10) })
+  const prevText = prevRows.length
+    ? `This patient's most recent earlier values on file (test, value, date):\n${[...prev.entries()].map(([t, v]) => `${t}: ${v.value} ${v.unit} (${v.date})`).join('\n')}`
+    : 'No earlier lab values are on file for this patient, so leave trend empty.'
   const out = await aiJson<any>({ kind: 'scan', clinicId: u.clinic_id, userId: u.id, system: SCAN_SYSTEM, schemaName: 'medical_document', schema: SCAN_SCHEMA, effort: 'medium', maxTokens: 16000,
-    parts: [{ type: 'input_text', text: 'Extract this document.' }, isPdf ? { type: 'input_file', filename: 'document.pdf', file_data: b.image } : { type: 'input_image', image_url: b.image, detail: 'high' }] })
+    parts: [{ type: 'input_text', text: `Extract this document. Today is ${istToday()}.\n${prevText}` }, isPdf ? { type: 'input_file', filename: 'document.pdf', file_data: b.image } : { type: 'input_image', image_url: b.image, detail: 'high' }] })
   const docDate = /^\d{4}-\d{2}-\d{2}$/.test(out.doc_date) && out.doc_date <= istToday() ? out.doc_date : null
+  // Match each extracted value to the earlier one by the same normalised test name, and work out the
+  // change here rather than trusting the model's arithmetic.
+  const num = (s: string) => { const n = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? null : n }
+  const comparison = (out.labs || []).map((l: any) => {
+    const p = prev.get(normTest(l.test))
+    if (!p) return { test: l.test, previous: null }
+    const a = num(l.value), bv = num(p.value)
+    return { test: l.test, previous: { value: p.value, unit: p.unit, date: p.date }, change: a != null && bv != null ? +(a - bv).toFixed(2) : null, direction: a != null && bv != null ? (a > bv ? 'up' : a < bv ? 'down' : 'same') : null }
+  })
   const [doc] = await sql()`insert into arx.documents (clinic_id, patient_id, file_id, kind, doc_date, extracted, created_by)
-    values (${u.clinic_id}, ${b.patient_id}, ${file.id}, ${out.doc_type}, ${docDate}, ${sql().json(out)}, ${u.id}) returning id`
+    values (${u.clinic_id}, ${b.patient_id}, ${file.id}, ${out.doc_type}, ${docDate}, ${sql().json({ ...out, comparison })}, ${u.id}) returning id`
   await audit(c, 'ai.scan', 'document', doc.id, { type: out.doc_type, labs: out.labs?.length, meds: out.medicines?.length })
-  return c.json({ document_id: doc.id, file_id: file.id, ...out, doc_date: docDate })
+  return c.json({ document_id: doc.id, file_id: file.id, ...out, doc_date: docDate, comparison })
+})
+
+/** Scanned documents across the clinic, for the Lab reports screen. */
+r.get('/documents', async c => {
+  const kind = c.req.query('kind')
+  const q = (c.req.query('q') || '').trim()
+  return c.json(await sql()`select d.id, d.kind, d.doc_date, d.file_id, d.created_at, d.patient_id, d.extracted, p.name as patient_name, p.uhid
+    from arx.documents d join arx.patients p on p.id = d.patient_id
+    where d.clinic_id = ${me(c).clinic_id}
+      ${kind ? sql()`and d.kind = ${kind}` : sql()``}
+      ${q ? sql()`and (p.name ilike ${'%' + q + '%'} or p.uhid ilike ${'%' + q + '%'})` : sql()``}
+    order by coalesce(d.doc_date, d.created_at::date) desc, d.created_at desc limit 100`)
 })
 
 const INTAKE_SCHEMA = S({

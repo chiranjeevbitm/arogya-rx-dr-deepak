@@ -72,7 +72,28 @@ export function VoiceDialog({ patientId, rxId, onClose, onApply }: { patientId: 
   </Modal>
 }
 
-type Scan = { document_id: string; doc_type: string; legible: boolean; doc_date: string | null; source_name: string; diagnoses: string[]; allergies: string[]; medicines: { name: string; dose: string; freq: string; duration: string }[]; labs: { test: string; value: string; unit: string; ref_range: string; flag: string }[]; notes: string }
+export type ScanInterpretation = { summary: string; abnormal: { test: string; value: string; note: string; severity: string }[]; trend: { test: string; direction: string; note: string }[]; watch: string[] }
+export type ScanComparison = { test: string; previous: { value: string; unit: string; date: string } | null; change?: number | null; direction?: string | null }
+export type Scan = { document_id: string; doc_type: string; legible: boolean; doc_date: string | null; source_name: string; diagnoses: string[]; allergies: string[]; medicines: { name: string; dose: string; freq: string; duration: string }[]; labs: { test: string; value: string; unit: string; ref_range: string; flag: string }[]; notes: string; interpretation?: ScanInterpretation; comparison?: ScanComparison[] }
+
+/** What the AI made of a lab report, next to the values it read. Always a draft: the doctor decides. */
+export function ScanAnalysis({ s }: { s: Scan }) {
+  const i = s.interpretation
+  if (!i || (!i.summary && !i.abnormal?.length && !i.trend?.length && !i.watch?.length)) return null
+  return <div className="card stack tight">
+    <div className="row"><b className="small grow">What this report shows</b><span className="tag amber">AI draft \u2014 check it</span></div>
+    {i.summary && <p className="small" style={{ margin: 0 }}>{i.summary}</p>}
+    {i.abnormal?.length > 0 && <div className="stack tight">
+      <b className="tiny muted">Outside the range</b>
+      {i.abnormal.map((a, k) => <div key={k} className="small"><b style={{ color: 'var(--sindoor)' }}>{a.test} {a.value}</b>{a.severity ? <span className="tag" style={{ marginLeft: 6 }}>{a.severity}</span> : null}<br /><span className="muted">{a.note}</span></div>)}
+    </div>}
+    {i.trend?.length > 0 && <div className="stack tight">
+      <b className="tiny muted">Against the last report</b>
+      {i.trend.map((t, k) => <div key={k} className="small">{t.direction === 'up' ? '\u2191' : t.direction === 'down' ? '\u2193' : '\u2192'} <b>{t.test}</b> <span className="muted">{t.note}</span></div>)}
+    </div>}
+    {i.watch?.length > 0 && <div className="stack tight"><b className="tiny muted">Worth rechecking</b>{i.watch.map((w, k) => <div key={k} className="small muted">\u2022 {w}</div>)}</div>}
+  </div>
+}
 
 /** Photo of an old prescription or lab report → structured history the doctor confirms. */
 export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string; onClose: () => void; onSaved: (s: { labs: number; allergies: string[]; conditions: string[]; summary: string }) => void }) {
@@ -124,10 +145,13 @@ export function ScanDialog({ patientId, onClose, onSaved }: { patientId: string;
         {!scan.legible && <div className="alert warn small">Much of this page was hard to read. Check every value.</div>}
         <div className="small"><b>{scan.doc_type === 'lab_report' ? 'Lab report' : scan.doc_type === 'old_rx' ? 'Old prescription' : 'Document'}</b>{scan.source_name ? `, ${scan.source_name}` : ''}</div>
         <label className="field"><span>Date of this document</span><input type="date" className="inp sm" value={date} max={istToday()} onChange={e => setDate(e.target.value)} /></label>
-        {scan.labs.length > 0 && <div className="card flush"><table className="t"><thead><tr><th></th><th>Test</th><th className="num">Value</th><th>Range</th></tr></thead><tbody>
-          {scan.labs.map((l, i) => <tr key={i}><td><input type="checkbox" checked={labSel[i]} onChange={e => setLabSel(labSel.map((x, j) => j === i ? e.target.checked : x))} aria-label={`Keep ${l.test}`} /></td>
-            <td>{l.test}</td><td className="num"><b style={{ color: l.flag === 'high' || l.flag === 'low' ? 'var(--sindoor)' : undefined }}>{l.value}</b> {l.unit}</td><td className="small muted">{l.ref_range}</td></tr>)}
+        {scan.labs.length > 0 && <div className="card flush"><table className="t"><thead><tr><th></th><th>Test</th><th className="num">Value</th><th className="num">Last time</th><th>Range</th></tr></thead><tbody>
+          {scan.labs.map((l, i) => { const cmp = (scan.comparison || []).find(x => x.test === l.test); return <tr key={i}><td><input type="checkbox" checked={labSel[i]} onChange={e => setLabSel(labSel.map((x, j) => j === i ? e.target.checked : x))} aria-label={`Keep ${l.test}`} /></td>
+            <td>{l.test}</td><td className="num"><b style={{ color: l.flag === 'high' || l.flag === 'low' ? 'var(--sindoor)' : undefined }}>{l.value}</b> {l.unit}</td>
+            <td className="num small muted">{cmp?.previous ? <span title={`Measured ${cmp.previous.date}`}>{cmp.direction === 'up' ? '\u2191' : cmp.direction === 'down' ? '\u2193' : ''} {cmp.previous.value} {cmp.previous.unit}</span> : '\u2014'}</td>
+            <td className="small muted">{l.ref_range}</td></tr> })}
         </tbody></table></div>}
+        <ScanAnalysis s={scan} />
         {scan.medicines.length > 0 && <div className="small"><b className="muted">Medicines on the page</b>{scan.medicines.map((m, i) => <div key={i}>{m.name} {m.dose} {m.freq} {m.duration}</div>)}</div>}
         {scan.diagnoses.length > 0 && <label className="check small"><input type="checkbox" checked={addDx} onChange={e => setAddDx(e.target.checked)} />Add to conditions: {scan.diagnoses.join(', ')}</label>}
         {scan.allergies.length > 0 && <label className="check small"><input type="checkbox" checked={addAllergy} onChange={e => setAddAllergy(e.target.checked)} />Add allergies: {scan.allergies.join(', ')}</label>}

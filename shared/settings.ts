@@ -2,12 +2,22 @@
 import type { Med } from './rx.js'
 
 export type Session = { label: string; start: string; end: string }
+
+/** Per-area colours. Empty string means "follow the ink colour", which is how every parchi
+    looked before these existed, so an old clinic row keeps its appearance exactly. */
+export type ParchiColors = { header: string; headings: string; hindi: string; signature: string; footer: string }
+/** Per-area fonts. Empty family means "follow the page font"; scale 1 means "no change". */
+export type ParchiFont = { family: string; scale: number }
+export type ParchiFonts = { body: ParchiFont; clinic: ParchiFont; doctor: ParchiFont; headings: ParchiFont; medicines: ParchiFont; hindi: ParchiFont; signature: ParchiFont }
+
 export type ClinicSettings = {
   letterhead: {
     clinic_name_hi: string; clinic_name_en: string; address_hi: string; address_en: string
     doctor_en: string; quals_en: string; doctor_hi: string; quals_hi: string
     designation: string; reg_no: string; phone: string; timings: string; validity_days: number
     signature_name: string; signature_quals: string; ink: string; accent: string
+    colors: ParchiColors; fonts: ParchiFonts
+    signature_height_mm: number; show_signature_quals: boolean; dsc_note: string
     logo_file_id: string | null; signature_file_id: string | null; use_letterhead_art: boolean; diet_image: boolean
     show_qr: boolean; qr_text: string; show_diet: boolean
     diet: { label: string; text: string }[]; footer_note: string
@@ -17,9 +27,31 @@ export type ClinicSettings = {
   hours: { sessions: Session[]; slot_minutes: number; closed_days: number[]; per_slot: number }
   fees: { new_visit: number; follow_up: number; follow_up_days: number; upi_vpa: string; payee_name: string; extras: { label: string; amount: number }[] }
   booking: { enabled: boolean; days_ahead: number; note: string }
-  whatsapp: { clinic_number: string; auto_send_rx: boolean; reminder_day_before: boolean }
+  whatsapp: { clinic_number: string; auto_send_rx: boolean; reminder_day_before: boolean; confirm_appointments: boolean; alert_clinic_on_booking: boolean }
   uhid_prefix: string
 }
+
+/** The families the parchi can use. The first four ship with the app, so they print the same on
+    every machine including the clinic PC when the internet is down; the rest are system fonts. */
+export const PARCHI_FONTS: { value: string; label: string }[] = [
+  { value: '', label: 'Page font (Hind)' },
+  { value: "'Martel', serif", label: 'Martel (serif)' },
+  { value: "'Lora', serif", label: 'Lora (serif)' },
+  { value: "'Noto Serif Devanagari', serif", label: 'Noto Serif Devanagari' },
+  { value: "'Kalam', cursive", label: 'Kalam (handwriting)' },
+  { value: "'IBM Plex Mono', ui-monospace, monospace", label: 'IBM Plex Mono' },
+  { value: 'Georgia, serif', label: 'Georgia (system serif)' },
+  { value: "'Times New Roman', Times, serif", label: 'Times New Roman' },
+  { value: 'Arial, Helvetica, sans-serif', label: 'Arial' },
+  { value: 'system-ui, sans-serif', label: 'System default' },
+]
+
+const FONT = (family = '', scale = 1): ParchiFont => ({ family, scale })
+export const DEFAULT_FONTS: ParchiFonts = {
+  body: FONT(), clinic: FONT("'Martel', serif"), doctor: FONT(), headings: FONT(),
+  medicines: FONT(), hindi: FONT(), signature: FONT("'Kalam', cursive"),
+}
+export const DEFAULT_COLORS: ParchiColors = { header: '', headings: '', hindi: '', signature: '', footer: '' }
 
 export const DEFAULT_SETTINGS: ClinicSettings = {
   letterhead: {
@@ -40,6 +72,11 @@ export const DEFAULT_SETTINGS: ClinicSettings = {
     signature_quals: 'MBBS (SKMCH), MD General Medicine (DMCH Darbhanga)',
     ink: '#16295f',
     accent: '#d0201b',
+    colors: { header: '', headings: '', hindi: '', signature: '', footer: '' },
+    fonts: { body: { family: '', scale: 1 }, clinic: { family: "'Martel', serif", scale: 1 }, doctor: { family: '', scale: 1 }, headings: { family: '', scale: 1 }, medicines: { family: '', scale: 1 }, hindi: { family: '', scale: 1 }, signature: { family: "'Kalam', cursive", scale: 1 } },
+    signature_height_mm: 10,
+    show_signature_quals: false,
+    dsc_note: '',
     logo_file_id: null,
     signature_file_id: null,
     use_letterhead_art: false,
@@ -69,7 +106,7 @@ export const DEFAULT_SETTINGS: ClinicSettings = {
   },
   fees: { new_visit: 500, follow_up: 300, follow_up_days: 21, upi_vpa: '', payee_name: 'Arogya Clinic', extras: [{ label: 'GRBS (sugar test)', amount: 50 }, { label: 'ECG', amount: 200 }, { label: 'Injection charge', amount: 50 }, { label: 'Nebulisation', amount: 100 }] },
   booking: { enabled: true, days_ahead: 7, note: 'Please arrive 10 minutes before your time and bring old prescriptions and reports.' },
-  whatsapp: { clinic_number: '919199943818', auto_send_rx: false, reminder_day_before: true },
+  whatsapp: { clinic_number: '919199943818', auto_send_rx: false, reminder_day_before: true, confirm_appointments: true, alert_clinic_on_booking: true },
   uhid_prefix: 'AC',
 }
 
@@ -78,7 +115,11 @@ export function mergeSettings(s: any): ClinicSettings {
   s = s || {}
   return {
     ...d, ...s,
-    letterhead: { ...d.letterhead, ...(s.letterhead || {}) },
+    letterhead: {
+      ...d.letterhead, ...(s.letterhead || {}),
+      colors: { ...d.letterhead.colors, ...(s.letterhead?.colors || {}) },
+      fonts: Object.fromEntries(Object.entries(d.letterhead.fonts).map(([k, v]) => [k, { ...v, ...(s.letterhead?.fonts?.[k] || {}) }])) as ParchiFonts,
+    },
     hours: { ...d.hours, ...(s.hours || {}) },
     fees: { ...d.fees, ...(s.fees || {}) },
     booking: { ...d.booking, ...(s.booking || {}) },
