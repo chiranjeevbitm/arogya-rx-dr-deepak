@@ -37,7 +37,7 @@ r.post('/', async c => {
   const net = total - b.discount
   const paid = b.mode === 'due' ? 0 : b.mode === 'free' ? 0 : net
   const bill = await sql().begin(async tx => {
-    const [p] = await tx`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
+    const [p] = await tx`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id} and archived_at is null`
     if (!p) throw new HttpError(404, 'Patient not found.')
     if (b.visit_id) {
       const [ex] = await tx`select bill_no from arx.bills where visit_id = ${b.visit_id} and status <> 'void'`

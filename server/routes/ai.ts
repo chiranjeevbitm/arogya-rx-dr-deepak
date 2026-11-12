@@ -176,7 +176,7 @@ r.post('/scan', async c => {
   const m = b.image.match(/^data:((?:image\/(?:jpeg|png|webp))|application\/pdf);base64,(.+)$/)
   if (!m) throw new HttpError(400, 'Send a JPG, PNG or WebP photo, or a PDF.')
   const isPdf = m[1] === 'application/pdf'
-  const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
+  const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id} and archived_at is null`
   if (!p) throw new HttpError(404, 'Patient not found.')
   const file = await putFile({ clinicId: u.clinic_id, kind: 'scan', mime: m[1], data: Buffer.from(m[2], 'base64'), userId: u.id })
   // The patient's own earlier values, so the report can be read against them instead of in isolation.

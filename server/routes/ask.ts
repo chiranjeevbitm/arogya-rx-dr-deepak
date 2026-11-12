@@ -56,7 +56,7 @@ r.post('/', async c => {
       const test = it.test.startsWith('BP') ? 'BP systolic' : normTest(it.test)
       const rows = await db`select distinct on (p.id) p.id, p.name, p.uhid, l.value_num::float as v, l.result_date
         from arx.lab_results l join arx.patients p on p.id = l.patient_id
-        where l.clinic_id = ${cid} and l.test = ${test} and l.value_num is not null
+        where l.clinic_id = ${cid} and l.test = ${test} and l.value_num is not null and p.archived_at is null
           ${condLike ? db`and exists (select 1 from unnest(p.conditions) x where lower(x) like ${condLike})` : db``}
         order by p.id, l.result_date desc`
       const hit = rows.filter(r => (it.op === '<' ? r.v < (it.value ?? 0) : r.v > (it.value ?? 0))).sort((a, b) => b.v - a.v)
@@ -64,7 +64,7 @@ r.post('/', async c => {
     }
     case 'condition': {
       const rows = await db`select id, name, uhid, conditions, (select max(visit_date) from arx.visits v where v.patient_id = p.id) as last from arx.patients p
-        where clinic_id = ${cid} and exists (select 1 from unnest(conditions) x where lower(x) like ${condLike || '%'}) order by name limit 50`
+        where clinic_id = ${cid} and archived_at is null and exists (select 1 from unnest(conditions) x where lower(x) like ${condLike || '%'}) order by name limit 50`
       return c.json({ answer: `${rows.length} patient${rows.length === 1 ? '' : 's'} with ${it.condition || 'a recorded condition'}.`, rows: P(rows, r => r.conditions.join(', ')) })
     }
     case 'followups_due': {
@@ -76,12 +76,12 @@ r.post('/', async c => {
     case 'overdue': {
       const since = addDaysISO(istToday(), -(it.days || 90))
       const rows = await db`select p.id, p.name, p.uhid, p.phone, max(v.visit_date) as last from arx.patients p left join arx.visits v on v.patient_id = p.id
-        where p.clinic_id = ${cid} ${condLike ? db`and exists (select 1 from unnest(p.conditions) x where lower(x) like ${condLike})` : db``}
+        where p.clinic_id = ${cid} and p.archived_at is null ${condLike ? db`and exists (select 1 from unnest(p.conditions) x where lower(x) like ${condLike})` : db``}
         group by p.id having coalesce(max(v.visit_date), (select max(rx_date) from arx.prescriptions r where r.patient_id = p.id)) < ${since} order by last nulls first limit 50`
       return c.json({ answer: `${rows.length} patient${rows.length === 1 ? '' : 's'}${it.condition ? ` with ${it.condition.toLowerCase()}` : ''} not seen in ${it.days || 90} days.`, rows: P(rows, r => (r.phone || 'no mobile') + (r.last ? ` · last ${fmtDate(new Date(r.last).toISOString().slice(0, 10))}` : '')) })
     }
     case 'patient_summary': {
-      const [p] = await db`select id, name, uhid, age_years, sex, conditions, allergies from arx.patients where clinic_id = ${cid} and lower(name) operator(extensions.%) ${it.name.toLowerCase()} order by extensions.similarity(lower(name), ${it.name.toLowerCase()}) desc limit 1`
+      const [p] = await db`select id, name, uhid, age_years, sex, conditions, allergies from arx.patients where clinic_id = ${cid} and archived_at is null and lower(name) operator(extensions.%) ${it.name.toLowerCase()} order by extensions.similarity(lower(name), ${it.name.toLowerCase()}) desc limit 1`
       if (!p) return c.json({ answer: `No patient found called “${it.name}”.`, rows: [] })
       const rx = await db`select rx_date, data->>'diagnosis' as dx, meds from arx.prescriptions where patient_id = ${p.id} and status = 'final' order by rx_date desc limit 3`
       const labs = await db`select distinct on (test) test, value_num::float as v, result_date from arx.lab_results where patient_id = ${p.id} and test in ('HbA1c','BP systolic','FBS','TSH','S. creatinine') order by test, result_date desc`
@@ -98,7 +98,7 @@ r.post('/', async c => {
       return c.json({ answer: `Today: ${v.n} patients in the queue, ${v.done} seen. ${a.n} booked online. ${m.n} prescriptions sent on WhatsApp.`, rows: [] })
     }
     case 'allergies': {
-      const rows = await db`select id, name, uhid, allergies from arx.patients where clinic_id = ${cid} and cardinality(allergies) > 0 and not ('None known' = any(allergies)) order by name limit 50`
+      const rows = await db`select id, name, uhid, allergies from arx.patients where clinic_id = ${cid} and archived_at is null and cardinality(allergies) > 0 and not ('None known' = any(allergies)) order by name limit 50`
       return c.json({ answer: `${rows.length} patient${rows.length === 1 ? '' : 's'} with recorded allergies.`, rows: P(rows, r => r.allergies.join(', ')) })
     }
     default:

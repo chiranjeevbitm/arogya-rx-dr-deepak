@@ -51,7 +51,7 @@ r.post('/clinic/:slug/book', async c => {
   if (!slot || slot.past || slot.free <= 0) throw new HttpError(409, 'That time was just taken. Please pick another.')
   const [dup] = await sql()`select id from arx.appointments where clinic_id = ${cl.id} and phone = ${phone} and appt_date = ${b.date} and status = 'booked'`
   if (dup) throw new HttpError(409, 'You already have a booking that day.')
-  const [p] = await sql()`select id from arx.patients where clinic_id = ${cl.id} and phone = ${phone} and lower(name) = ${b.name.toLowerCase()} limit 1`
+  const [p] = await sql()`select id from arx.patients where clinic_id = ${cl.id} and archived_at is null and phone = ${phone} and lower(name) = ${b.name.toLowerCase()} limit 1`
   const [a] = await sql()`insert into arx.appointments (clinic_id, patient_id, name, phone, age_years, sex, appt_date, appt_time, session, reason, source)
     values (${cl.id}, ${p?.id ?? null}, ${b.name}, ${phone}, ${b.age_years ?? null}, ${b.sex ?? null}, ${b.date}, ${b.time}, ${slot.session}, ${b.reason ?? null}, 'online') returning id`
   const when = `${fmtDate(b.date)}, ${b.time}`

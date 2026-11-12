@@ -8,6 +8,7 @@ import { Modal, Spinner, useAsync, useToast, useDialog, Field, TagInput } from '
 import Icon from '../components/Icon'
 import { liveSpeech } from '../lib/media'
 import Recordings from '../components/Recordings'
+import { RemovePatientDialog } from './PatientPage'
 import { ParchiPreview } from '../components/Parchi'
 import MedSearch from '../components/MedSearch'
 import { mergeSettings, PARCHI_FONTS, type ClinicSettings } from '../../shared/settings'
@@ -348,7 +349,7 @@ function Security() {
   const [f, setF] = useState({ current: '', next: '', again: '' })
   const audit = useAsync(() => me.user.role !== 'reception' ? api<any[]>('/clinic/audit') : Promise.resolve([]), [])
   const change = async () => { if (f.next !== f.again) return toast('The new passwords do not match.', 'err'); try { await api('/auth/password', { body: { current: f.current, next: f.next } }); toast('Password changed. Other devices are logged out.', 'ok'); setF({ current: '', next: '', again: '' }) } catch (e: any) { toast(e.message, 'err') } }
-  const label: Record<string, string> = { login: 'Logged in', 'login.failed': 'Failed login', 'rx.finalize': 'Finalised prescription', 'rx.reopen': 'Reopened prescription', 'bill.create': 'Made bill', 'bill.void': 'Cancelled bill', 'patient.create': 'Added patient', 'patient.update': 'Edited patient', 'visit.create': 'Gave token', 'settings.update': 'Changed settings', 'staff.create': 'Added staff', 'staff.update': 'Changed staff', 'whatsapp.rx.api': 'Sent Rx (auto)', 'whatsapp.rx.link': 'Sent Rx (link)', 'ai.voice_rx': 'Voice draft', 'ai.scan': 'Scanned document', 'appointment.create': 'Booked appointment', 'appointment.arrive': 'Marked arrived', 'import.start': 'Started import', 'password.change': 'Changed password', 'logout.others': 'Logged out other devices' }
+  const label: Record<string, string> = { login: 'Logged in', 'login.failed': 'Failed login', 'rx.finalize': 'Finalised prescription', 'rx.reopen': 'Reopened prescription', 'bill.create': 'Made bill', 'bill.void': 'Cancelled bill', 'patient.create': 'Added patient', 'patient.update': 'Edited patient', 'visit.create': 'Gave token', 'settings.update': 'Changed settings', 'staff.create': 'Added staff', 'staff.update': 'Changed staff', 'whatsapp.rx.api': 'Sent Rx (auto)', 'whatsapp.rx.link': 'Sent Rx (link)', 'ai.voice_rx': 'Voice draft', 'ai.scan': 'Scanned document', 'appointment.create': 'Booked appointment', 'appointment.arrive': 'Marked arrived', 'import.start': 'Started import', 'password.change': 'Changed password', 'logout.others': 'Logged out other devices', 'patient.archive': 'Removed patient', 'patient.restore': 'Put patient back' }
   return <div className="stack" style={{ maxWidth: 820 }}>
     <section className="sec"><div className="sec-h"><h3>Change my password</h3></div><div className="sec-b">
       <div className="grid3"><Field label="Current password"><input type="password" className="inp" autoComplete="current-password" value={f.current} onChange={e => setF({ ...f, current: e.target.value })} /></Field>
@@ -361,11 +362,36 @@ function Security() {
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={async () => { if ((await dlg.ask('Log out all other devices?', { text: 'Every other phone and computer signed in with your number will need to log in again. This device stays signed in.', ok: 'Log out others', danger: true })) !== 'ok') return; try { await api('/auth/logout-others', { method: 'POST' }); toast('Other devices are logged out.', 'ok') } catch (e: any) { toast(e.message, 'err') } }}>Log out other devices</button>
     </div></section>
     <SpeedCheck />
+    {me.user.role !== 'reception' && <RemovedPatients />}
     {me.user.role !== 'reception' && <section className="card flush"><div className="card-h" style={{ padding: '14px 16px 0' }}><h2>Activity log</h2><span className="small muted">Every login, prescription, bill and setting change. It cannot be edited.</span></div>
       <div className="tbl-wrap" style={{ maxHeight: 460, overflow: 'auto' }}><table className="t"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>
         {(audit.data || []).map(a => <tr key={a.id}><td className="small nowrap">{fmtDate(d10(a.at))} {new Date(a.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td><td>{a.user_name || a.meta?.phone || '—'}</td><td>{label[a.action] || a.action}</td></tr>)}
       </tbody></table></div></section>}
   </div>
+}
+
+/** Patients the doctor has removed from the clinic's screens. Nothing here was deleted: every visit,
+    prescription, lab value and document is still in the database and comes back with the patient. */
+function RemovedPatients() {
+  const a = useAsync(() => api<any[]>('/patients/archived'), [])
+  const [back, setBack] = useState<any | null>(null)
+  const rows = a.data || []
+  return <section className="card flush">
+    <div className="card-h" style={{ padding: '14px 16px 0' }}><h2 className="grow">Removed patients</h2><span className="small muted">{rows.length ? `${rows.length} removed` : 'None removed'}</span></div>
+    <div className="sec-b" style={{ paddingTop: 8 }}>
+      <p className="small muted" style={{ margin: 0 }}>A removed patient is hidden from the patient list, search, the queue, Ask Arogya and the patient count. Their records are never deleted — put the patient back and everything is there again.</p>
+    </div>
+    {a.loading && !a.data ? <div className="empty small">Loading…</div> : rows.length === 0 ? <div className="empty small">No patient has been removed.</div> :
+      <div className="tbl-wrap" style={{ maxHeight: 420, overflow: 'auto' }}><table className="t"><thead><tr><th>Patient</th><th>Kept</th><th>Removed</th><th /></tr></thead><tbody>
+        {rows.map(x => <tr key={x.id}>
+          <td><b>{x.name}</b><br /><span className="small muted">{x.uhid}{x.phone ? ` · ${x.phone}` : ''}</span></td>
+          <td className="small">{x.visit_count} visit{x.visit_count === 1 ? '' : 's'}, {x.rx_count} prescription{x.rx_count === 1 ? '' : 's'}</td>
+          <td className="small nowrap">{fmtDate(d10(x.archived_at))}{x.archived_by_name ? <><br /><span className="muted">by {x.archived_by_name}</span></> : null}{x.archive_reason ? <><br /><span className="muted">{x.archive_reason}</span></> : null}</td>
+          <td><button className="btn sm" onClick={() => setBack(x)}>Put back</button></td>
+        </tr>)}
+      </tbody></table></div>}
+    {back && <RemovePatientDialog p={back} restoring onClose={() => setBack(null)} onDone={() => { setBack(null); a.reload() }} />}
+  </section>
 }
 
 /** Live check of each AI provider, this browser's speech and the last AI errors. */

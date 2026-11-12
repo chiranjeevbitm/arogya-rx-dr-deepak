@@ -10,12 +10,21 @@ Built on the Arogya Rx product design: prescriptions on the doctor's own letterh
 | **Schedule** | 14-day appointment book with slots from OPD hours, move, cancel, WhatsApp reminder, mark arrived (gives a token) |
 | **Intake** | Online and WhatsApp bookings with the patient's problem; photo intake of old prescriptions and lab reports |
 | **OPD & Rx** | Token queue, consult timer, one-tap templates, Hinglish voice-to-Rx, medicine search (Jan Aushadhi prices), allergy, duplicate and interaction checks, vitals flags, Hindi dose lines, cost box (branded vs Jan Aushadhi), live parchi, Print A5/A4, PDF, WhatsApp preview and send, bill, Save & call next |
-| **Patients** | Search, visit timeline, HbA1c / BP / sugar / weight trends, scanned documents, bills |
+| **Patients** | Search, visit timeline, HbA1c / BP / sugar / weight trends, scanned documents, bills, **Remove patient** (doctor's password; hides the patient everywhere, deletes nothing, reversible) |
 | **Billing** | Bills with cash / UPI / card / unpaid, receipts with UPI QR, daily collection, CSV export |
-| **Settings** | Letterhead studio (layout, ink, A5/A4, logo, signature), OPD hours and fees, staff logins, templates, WhatsApp and AI, import from the old app, password and activity log |
+| **Settings** | Letterhead studio (layout, ink, A5/A4, logo, signature), OPD hours and fees, staff logins, templates, WhatsApp and AI, import from the old app, password, removed patients, activity log |
 | **/book/arogya-clinic** | Public booking page for patients |
 
 Roles: **doctor** (everything), **reception** (registration, queue, vitals, appointments, bills), **admin**.
+
+### Removing a patient
+Only a doctor or admin can remove a patient, and only after typing their own login password again (rate limited, 10 tries per 15 minutes).
+Removing **archives**, it does not delete: the patient vanishes from the patient list, search, today's queue, Ask Arogya and the patient
+count, their token today and any booked appointment are cancelled, and new prescriptions, tokens, bills, lab values and scans are refused
+for them — but every visit, prescription, lab value, document, bill and recording stays in the database. *Settings → Security → Removed
+patients* lists them with what is being kept and puts any of them back, password again. Both actions are written to the activity log with
+the patient's name and UHID. A hard delete was deliberately not built: every child table is `on delete cascade`, so one mis-tap would take
+a whole medical history with it.
 
 ## Stack
 - React + Vite + TypeScript frontend; Hono API as one Vercel Function (Mumbai, `bom1`)

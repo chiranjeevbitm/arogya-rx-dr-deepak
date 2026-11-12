@@ -42,7 +42,7 @@ r.post('/', async c => {
   const phone = normPhone(b.phone)
   if (!/^[0-9]{10}$/.test(phone)) throw new HttpError(400, 'Mobile number must be 10 digits.')
   let pid = b.patient_id ?? null
-  if (!pid) { const [p] = await sql()`select id from arx.patients where clinic_id = ${me(c).clinic_id} and phone = ${phone} and lower(name) = ${b.name.toLowerCase()} limit 1`; pid = p?.id ?? null }
+  if (!pid) { const [p] = await sql()`select id from arx.patients where clinic_id = ${me(c).clinic_id} and archived_at is null and phone = ${phone} and lower(name) = ${b.name.toLowerCase()} limit 1`; pid = p?.id ?? null }
   const [a] = await sql()`insert into arx.appointments (clinic_id, patient_id, name, phone, age_years, sex, appt_date, appt_time, reason, source, created_by, seen_at)
     values (${me(c).clinic_id}, ${pid}, ${b.name}, ${phone}, ${b.age_years ?? null}, ${b.sex ?? null}, ${b.date}, ${b.time ?? null}, ${b.reason ?? null}, ${b.source}, ${me(c).id}, now()) returning *`
   await audit(c, 'appointment.create', 'appointment', a.id)

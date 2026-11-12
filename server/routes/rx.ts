@@ -52,7 +52,7 @@ r.get('/:id', async c => {
 r.post('/', requireAuth('doctor', 'admin'), async c => {
   const b = await body(c, z.object({ patient_id: z.string().uuid(), copy_from: z.string().uuid().optional() }))
   const u = me(c)
-  const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id}`
+  const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id} and archived_at is null`
   if (!p) throw new HttpError(404, 'Patient not found.')
   let data: any = { complaints: '', vitals: {}, exam: {}, systemic: {}, comorbid: {}, comorbid_details: {}, addiction: {}, investigations: [], advice: [], diagnosis: '', follow_up: { days: null, note: '' }, hindi: true }
   let meds: any[] = []

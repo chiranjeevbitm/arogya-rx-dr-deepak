@@ -26,7 +26,7 @@ export async function saveRecording(clinicId: string, userId: string, audio: Buf
   if (audio.length > MAX_BYTES) throw new HttpError(413, 'The recording is too long to keep (over 3 MB).')
   const clean = mime.split(';')[0]
   if (!/^audio\/(webm|ogg|mp4|mpeg|wav|aac)$/.test(clean)) throw new HttpError(400, 'Not an audio recording.')
-  if (m.patient_id) { const [p] = await sql()`select id from arx.patients where id = ${m.patient_id} and clinic_id = ${clinicId}`; if (!p) throw new HttpError(404, 'Patient not found.') }
+  if (m.patient_id) { const [p] = await sql()`select id from arx.patients where id = ${m.patient_id} and clinic_id = ${clinicId} and archived_at is null`; if (!p) throw new HttpError(404, 'Patient not found.') }
   if (m.rx_id) { const [x] = await sql()`select id from arx.prescriptions where id = ${m.rx_id} and clinic_id = ${clinicId}`; if (!x) m.rx_id = null }
   const f = await putFile({ clinicId, kind: 'voice', mime: clean, data: audio, userId })
   const [row] = await sql()`insert into arx.recordings (clinic_id, patient_id, rx_id, file_id, kind, mime, bytes, seconds, transcript, created_by)
@@ -58,7 +58,7 @@ r.get('/', requireAuth('doctor'), async c => {
     ? await sql()`select r.id, r.kind, r.patient_id, r.rx_id, r.mime, r.bytes, r.seconds::float as seconds, r.transcript, r.created_at, u.name as by_name
         from arx.recordings r left join arx.users u on u.id = r.created_by where r.clinic_id = ${u.clinic_id} and r.patient_id = ${pid} order by r.created_at desc limit ${limit}`
     : await sql()`select r.id, r.kind, r.patient_id, r.rx_id, r.mime, r.bytes, r.seconds::float as seconds, r.transcript, r.created_at, u.name as by_name, p.name as patient_name
-        from arx.recordings r left join arx.users u on u.id = r.created_by left join arx.patients p on p.id = r.patient_id where r.clinic_id = ${u.clinic_id} order by r.created_at desc limit ${limit}`
+        from arx.recordings r left join arx.users u on u.id = r.created_by left join arx.patients p on p.id = r.patient_id where r.clinic_id = ${u.clinic_id} and (r.patient_id is null or p.archived_at is null) order by r.created_at desc limit ${limit}`
   const [t] = await sql()`select count(*)::int as n, coalesce(sum(bytes), 0)::bigint as bytes from arx.recordings where clinic_id = ${u.clinic_id}`
   return c.json({ rows, total: t.n, total_bytes: Number(t.bytes) })
 })

@@ -20,6 +20,7 @@ export default function PatientPage({ id: pid }: { id?: string }) {
   const params = useParams(), id = pid || params.id, me = useMe(), toast = useToast(), nav = useNavigate()
   const d = useAsync(() => api<any>(`/patients/${id}`), [id])
   const [edit, setEdit] = useState(false), [scan, setScan] = useState(false), [lab, setLab] = useState(false), [bill, setBill] = useState(false), [receipt, setReceipt] = useState<string | null>(null), [peek, setPeek] = useState<string | null>(null)
+  const [remove, setRemove] = useState(false)
   const series = useMemo(() => {
     const m = new Map<string, { date: string; value: number }[]>()
     for (const l of d.data?.labs || []) if (l.value_num != null) { const k = l.test; if (!m.has(k)) m.set(k, []); m.get(k)!.push({ date: d10(l.result_date), value: l.value_num }) }
@@ -28,7 +29,7 @@ export default function PatientPage({ id: pid }: { id?: string }) {
   if (d.loading && !d.data) return <Spinner />
   if (d.error) return <div className="empty"><b>Patient not found</b>{d.error}</div>
   const { patient: p, prescriptions, visits, documents, bills, upcoming, labs } = d.data
-  const isDoc = me.user.role !== 'reception'
+  const isDoc = me.user.role !== 'reception', archived = !!p.archived_at, canRemove = me.user.role === 'doctor' || me.user.role === 'admin'
   // prescriptions, plus visits that have no prescription that day (e.g. rows brought in from the paper OPD register), newest first
   const rxDays = new Set(prescriptions.map((r: any) => d10(r.rx_date)))
   const history = [...prescriptions.map((r: any) => ({ kind: 'rx', d: d10(r.rx_date), r })), ...visits.filter((v: any) => !rxDays.has(d10(v.visit_date))).map((v: any) => ({ kind: 'visit', d: d10(v.visit_date), v }))]
@@ -41,11 +42,15 @@ export default function PatientPage({ id: pid }: { id?: string }) {
         <div className="row wrap" style={{ marginTop: 6 }}>{p.allergies.length ? <span className="tag red">Allergy: {p.allergies.join(', ')}</span> : <span className="tag">No known allergy</span>}{p.conditions.map((c: string) => <span key={c} className="tag ink">{c}</span>)}</div>
       </div>
       <div className="row wrap">
-        <button className="btn" onClick={() => setEdit(true)}><Icon n="edit" />Edit</button>
-        <button className="btn" onClick={queue}><Icon n="queue" />Add to today's queue</button>
-        {isDoc && <button className="btn primary" onClick={newRx}><Icon n="rx" />Open in OPD</button>}
+        {archived ? <button className="btn primary" onClick={() => setRemove(true)}>Put this patient back</button> : <>
+          <button className="btn" onClick={() => setEdit(true)}><Icon n="edit" />Edit</button>
+          <button className="btn" onClick={queue}><Icon n="queue" />Add to today's queue</button>
+          {isDoc && <button className="btn primary" onClick={newRx}><Icon n="rx" />Open in OPD</button>}
+          {canRemove && <button className="btn danger" title="Hide this patient from the clinic's screens" onClick={() => setRemove(true)}>Remove patient</button>}
+        </>}
       </div>
     </div>
+    {archived && <div className="alert warn small"><b>Removed from the patient list</b> on {fmtDate(d10(p.archived_at))}{p.archived_by_name ? ` by ${p.archived_by_name}` : ''}{p.archive_reason ? ` — ${p.archive_reason}` : ''}. Everything below is still kept and nothing was deleted. Put the patient back to use this record again.</div>}
     {p.notes && <div className="alert info small">{p.notes}</div>}
     {upcoming.length > 0 && <div className="alert info small"><Icon n="cal" size={18} /><span>Next appointment: {upcoming.map((a: any) => `${fmtDate(d10(a.appt_date))}${a.time ? ' ' + a.time : ''}`).join(', ')}</span></div>}
     <div className="ptgrid">
@@ -86,7 +91,46 @@ export default function PatientPage({ id: pid }: { id?: string }) {
     {bill && <BillDialog patient={{ id: p.id, name: p.name }} onClose={() => setBill(false)} onDone={id => { setBill(false); setReceipt(id); d.reload() }} />}
     {receipt && <ReceiptDialog billId={receipt} onClose={() => setReceipt(null)} onChange={d.reload} />}
     {peek && <ParchiViewDialog rxId={peek} onClose={() => setPeek(null)} />}
+    {remove && <RemovePatientDialog p={p} restoring={archived} counts={{ visits: visits.length, prescriptions: prescriptions.length, labs: labs.length, documents: documents.length }} onClose={() => setRemove(false)} onDone={() => { setRemove(false); if (archived) d.reload(); else nav('/patients', { replace: true }) }} />}
   </div>
+}
+
+/** Removing a patient is the one destructive-looking action in the app, so it says plainly what it does
+    (hides, never deletes) and asks the doctor for their own login password before it happens. */
+export function RemovePatientDialog({ p, restoring, counts, onClose, onDone }: {
+  p: any; restoring?: boolean; counts?: { visits: number; prescriptions: number; labs: number; documents: number }; onClose: () => void; onDone: () => void
+}) {
+  const toast = useToast()
+  const [pw, setPw] = useState(''), [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null)
+  const go = async () => {
+    if (!pw || busy) return
+    setBusy(true); setErr(null)
+    try {
+      await api(`/patients/${p.id}/${restoring ? 'restore' : 'archive'}`, { body: restoring ? { password: pw } : { password: pw, reason: reason.trim() || undefined } })
+      toast(restoring ? `${p.name} is back in the patient list` : `${p.name} removed from the patient list`, 'ok')
+      onDone()
+    } catch (e: any) { setErr(e.message); setPw('') } finally { setBusy(false) }
+  }
+  const kept = counts ? [counts.visits && `${counts.visits} visit${counts.visits > 1 ? 's' : ''}`, counts.prescriptions && `${counts.prescriptions} prescription${counts.prescriptions > 1 ? 's' : ''}`,
+    counts.labs && `${counts.labs} lab value${counts.labs > 1 ? 's' : ''}`, counts.documents && `${counts.documents} document${counts.documents > 1 ? 's' : ''}`].filter(Boolean).join(', ') : ''
+  return <Modal title={restoring ? `Put ${p.name} back?` : `Remove ${p.name}?`} width={520} onClose={onClose} footer={<>
+    <button className="btn" onClick={onClose}>Cancel</button>
+    <button className={'btn ' + (restoring ? 'primary' : 'danger')} disabled={!pw || busy} onClick={go}>{busy ? 'Please wait…' : restoring ? 'Put back' : 'Remove patient'}</button>
+  </>}>
+    <div className="stack">
+      {restoring
+        ? <p style={{ margin: 0 }}>{p.name} ({p.uhid}) goes back into the patient list and search, and can be given a token and a prescription again. Nothing has to be re-entered.</p>
+        : <>
+          <p style={{ margin: 0 }}><b>{p.name}</b> ({p.uhid}) disappears from the patient list, search, today's queue, Ask Arogya and the patient count. Any token today and any appointment still to come are cancelled.</p>
+          <div className="alert info small" style={{ margin: 0 }}>Nothing is deleted.{kept ? ` ${kept} stay in the records,` : ' The records stay,'} and you can put the patient back any time from Settings → Security → Removed patients.</div>
+          <Field label="Why (optional, kept in the activity log)"><input className="inp" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. registered twice by mistake" maxLength={200} /></Field>
+        </>}
+      <Field label="Type your login password to confirm">
+        <input type="password" className="inp" autoComplete="current-password" autoFocus value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') go() }} />
+      </Field>
+      {err && <div className="alert warn small" style={{ margin: 0 }}>{err}</div>}
+    </div>
+  </Modal>
 }
 
 function LabDialog({ pid, onClose, onDone }: { pid: string; onClose: () => void; onDone: () => void }) {

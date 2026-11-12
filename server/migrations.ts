@@ -380,4 +380,18 @@ update arx.appointments set seen_at = created_at where seen_at is null and sourc
 create index if not exists appointments_unseen_idx on arx.appointments (clinic_id, seen_at) where seen_at is null;
 `,
   },
+  {
+    version: 8,
+    name: 'patient_archive',
+    // "Remove patient" hides a patient everywhere in the app without destroying anything: a deleted row would take
+    // the visits, prescriptions, lab values, documents and recordings with it (every one is `on delete cascade`),
+    // which is the wrong answer for a medical record. Archiving is reversible; only the doctor can do either.
+    sql: /* sql */ `
+alter table arx.patients add column if not exists archived_at timestamptz;
+alter table arx.patients add column if not exists archived_by uuid references arx.users(id) on delete set null;
+alter table arx.patients add column if not exists archive_reason text;
+create index if not exists patients_active_idx on arx.patients (clinic_id, updated_at desc) where archived_at is null;
+create index if not exists patients_archived_idx on arx.patients (clinic_id, archived_at desc) where archived_at is not null;
+`,
+  },
 ]

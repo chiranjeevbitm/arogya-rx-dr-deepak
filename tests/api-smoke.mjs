@@ -176,5 +176,33 @@ r = await call('GET', '/api/clinic/audit', null, 'doctor'); ok(r.j.some(a => a.a
   r = await call('GET', `/api/recordings/${rid}/audio`, null, 'doctor'); ok(r.status === 404, 'deleted recording is gone', r)
 }
 
+// Remove patient (archive): doctor only, password re-checked, hidden everywhere, reversible, nothing deleted
+{
+  const pt = await call('POST', '/api/patients', { name: 'Archive Test Patient', sex: 'F', age_years: 33, phone: '9934000077' }, 'doctor')
+  const pid = pt.j.id, uhid = pt.j.uhid
+  await call('POST', '/api/visits', { patient_id: pid, complaint: 'Fever' }, 'doctor')
+  r = await call('POST', `/api/patients/${pid}/archive`, { password: 'Deepak@2026' }, 'reception'); ok(r.status === 403, 'reception cannot remove a patient', r)
+  r = await call('POST', `/api/patients/${pid}/archive`, { password: 'not-my-password' }, 'doctor'); ok(r.status === 401, 'removing with the wrong password is refused', r)
+  r = await call('GET', '/api/patients?q=Archive Test', null, 'doctor'); ok(r.j.some(x => x.id === pid), 'patient is searchable before removal', r.j)
+  r = await call('POST', `/api/patients/${pid}/archive`, { password: 'Deepak@2026', reason: 'registered twice' }, 'doctor')
+  ok(r.status === 200 && r.j.visits === 1, 'doctor removes the patient with their password', r)
+  r = await call('POST', `/api/patients/${pid}/archive`, { password: 'Deepak@2026' }, 'doctor'); ok(r.status === 409, 'removing twice is refused', r)
+  r = await call('GET', '/api/patients?q=Archive Test', null, 'doctor'); ok(!r.j.some(x => x.id === pid), 'removed patient is gone from search', r.j)
+  r = await call('GET', '/api/patients?q=9934000077', null, 'doctor'); ok(!r.j.some(x => x.id === pid), 'removed patient is gone from phone search', r.j)
+  r = await call('GET', '/api/patients/browse?limit=200', null, 'doctor'); ok(!r.j.rows.some(x => x.id === pid), 'removed patient is gone from the patient list', r.j.total)
+  r = await call('GET', '/api/visits?date=' + new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), null, 'doctor'); ok(!r.j.some(x => x.patient_id === pid), "removed patient is gone from today's queue", r.j.length)
+  r = await call('POST', '/api/rx', { patient_id: pid }, 'doctor'); ok(r.status === 404, 'no new prescription for a removed patient', r)
+  r = await call('POST', '/api/visits', { patient_id: pid }, 'doctor'); ok(r.status === 404, 'no new token for a removed patient', r)
+  r = await call('PUT', `/api/patients/${pid}`, { name: 'Changed' }, 'doctor'); ok(r.status === 404, 'a removed patient cannot be edited', r)
+  r = await call('GET', `/api/patients/${pid}`, null, 'doctor'); ok(r.status === 200 && !!r.j.patient.archived_at && r.j.patient.visits !== 0, 'the record itself is still there, marked removed', r.j.patient?.archived_at)
+  r = await call('GET', '/api/patients/archived', null, 'doctor'); const row = r.j.find(x => x.id === pid)
+  ok(r.status === 200 && row?.uhid === uhid && row.archive_reason === 'registered twice' && row.visit_count === 0, 'removed patient is listed in Removed patients', row)
+  r = await call('GET', '/api/patients/archived', null, 'reception'); ok(r.status === 403, 'reception cannot see removed patients', r)
+  r = await call('POST', `/api/patients/${pid}/restore`, { password: 'wrong' }, 'doctor'); ok(r.status === 401, 'putting back needs the password too', r)
+  r = await call('POST', `/api/patients/${pid}/restore`, { password: 'Deepak@2026' }, 'doctor'); ok(r.status === 200, 'doctor puts the patient back', r)
+  r = await call('GET', '/api/patients?q=Archive Test', null, 'doctor'); ok(r.j.some(x => x.id === pid), 'patient is searchable again', r.j)
+  r = await call('POST', '/api/rx', { patient_id: pid }, 'doctor'); ok(r.status === 200, 'prescriptions work again after putting the patient back', r)
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

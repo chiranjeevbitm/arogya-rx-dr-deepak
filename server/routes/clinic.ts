@@ -94,7 +94,7 @@ r.get('/dashboard', requireAuth(), async c => {
          group by 1 order by 1`,
       tx`select to_char(d, 'YYYY-MM') as m, count(*)::int as n from (select patient_id, min(visit_date) as d from arx.visits where clinic_id = ${cid} and status <> 'cancelled' group by 1) x group by 1`,
       tx`select to_char(rx_date, 'YYYY-MM') as m, count(*)::int as n from arx.prescriptions where clinic_id = ${cid} and status = 'final' group by 1`,
-      tx`select (select count(*)::int from arx.patients where clinic_id = ${cid}) as patients, (select count(*)::int from arx.visits where clinic_id = ${cid} and status <> 'cancelled') as visits,
+      tx`select (select count(*)::int from arx.patients where clinic_id = ${cid} and archived_at is null) as patients, (select count(*)::int from arx.visits where clinic_id = ${cid} and status <> 'cancelled') as visits,
            (select min(visit_date) from arx.visits where clinic_id = ${cid} and status <> 'cancelled') as since`,
     ]))
     const fm = new Map(firsts.map(x => [x.m, x.n])), rm = new Map(rx.map(x => [x.m, x.n]))

@@ -25,7 +25,7 @@ r.get('/', async c => {
     left join lateral (select id, status from arx.prescriptions where visit_id = v.id order by created_at desc limit 1) rx on true
     left join lateral (select rx_date from arx.prescriptions where patient_id = v.patient_id and status = 'final' and visit_id is distinct from v.id order by rx_date desc limit 1) lr on true
     left join lateral (select id, paid, mode from arx.bills where visit_id = v.id and status <> 'void' order by created_at desc limit 1) b on true
-    where v.clinic_id = ${me(c).clinic_id} and v.visit_date = ${d}
+    where v.clinic_id = ${me(c).clinic_id} and v.visit_date = ${d} and p.archived_at is null
     order by case v.status when 'with_doctor' then 0 when 'waiting' then 1 when 'done' then 2 else 3 end, v.token`)
 })
 
@@ -58,7 +58,7 @@ r.post('/', async c => {
   const v = await sql().begin(async tx => {
     let pid = b.patient_id
     if (pid) {
-      const [p] = await tx`select id from arx.patients where id = ${pid} and clinic_id = ${u.clinic_id}`
+      const [p] = await tx`select id from arx.patients where id = ${pid} and clinic_id = ${u.clinic_id} and archived_at is null`
       if (!p) throw new HttpError(404, 'Patient not found.')
     } else pid = (await createPatient(tx, u.clinic_id, b.patient!)).id
     return addVisit(tx, u.clinic_id, u.id, { patient_id: pid!, complaint: b.complaint, vitals: b.vitals, visit_type: b.visit_type })
