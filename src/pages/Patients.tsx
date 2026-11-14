@@ -91,7 +91,7 @@ export default function Patients() {
           {list?.map(x => <button key={x.id} role="listitem" className={'q-item' + (x.id === id ? ' on' : '')} aria-current={x.id === id ? 'true' : undefined} onClick={() => open(x.id)}
             title={[x.name, x.uhid, x.last_visit ? 'last visit ' + fmtDate(d10(x.last_visit)) : '', x.conditions?.join(', ')].filter(Boolean).join(' · ')}>
             <span className="q-tok" style={{ fontFamily: 'var(--f-ui)', fontSize: 13 }}>{x.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
-            <span style={{ minWidth: 0 }}><span className="q-name">{x.name}</span><span className="q-sub">{x.uhid} · {x.age_years ?? ''}{x.sex || ''}{x.last_visit ? ` · ${fmtDate(d10(x.last_visit))}` : ''}</span>
+            <span style={{ minWidth: 0 }}><span className="q-name">{x.name}</span><span className="q-sub">{x.uhid} · {x.age_years ?? ''}{x.sex || ''}{x.last_visit ? ` · ${fmtDate(d10(x.last_visit)).replace(/\/\d{2}(\d{2})$/, '/$1')}` : ''}</span>
               {(x.visit_count || x.conditions?.length) ? <span className="q-sub">{[x.visit_count ? `${x.visit_count} visit${x.visit_count > 1 ? 's' : ''}` : '', x.conditions?.join(', ')].filter(Boolean).join(' · ')}</span> : null}</span>
           </button>)}
           {hasMore && <button type="button" className="q-item q-more" onClick={loadMore} disabled={more}>{more ? 'Loading…' : `Show ${Math.min(PAGE, total! - list!.length)} more`}</button>}
