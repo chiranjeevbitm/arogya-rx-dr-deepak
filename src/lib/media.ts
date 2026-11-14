@@ -10,6 +10,48 @@ export async function compressImage(file: File, maxEdge = 1800): Promise<string>
   } finally { URL.revokeObjectURL(url) }
 }
 
+/** Logo or signature for the letterhead. Always PNG, so a transparent background stays transparent (as JPEG it
+    turned black). With `clearPaper`, a photo or scan of a signature on white paper loses the paper too: light pixels fade
+    to transparent and dark ink stays, so it prints cleanly on the parchi. Empty margins are trimmed either way. */
+export async function prepareArt(file: File, opts: { maxEdge?: number; clearPaper?: boolean } = {}): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('That file is not an image this browser can open.')); i.src = url })
+    const k = Math.min(1, (opts.maxEdge || 900) / Math.max(img.width, img.height))
+    const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k))
+    const c = document.createElement('canvas'); c.width = w; c.height = h
+    const ctx = c.getContext('2d', { willReadFrequently: true })!
+    ctx.drawImage(img, 0, 0, w, h)
+    const id = ctx.getImageData(0, 0, w, h), px = id.data
+    if (opts.clearPaper) {
+      // the paper is the brightest common tone among opaque pixels; only a light background is removed
+      const lum: number[] = []
+      for (let i = 0; i < px.length; i += 16) if (px[i + 3] > 250) lum.push(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2])
+      if (lum.length > 50) {
+        lum.sort((a, b) => a - b)
+        const paper = lum[Math.floor(lum.length * 0.6)]
+        if (paper > 150) {
+          const hi = paper - 18, lo = Math.max(0, paper - 110)
+          for (let i = 0; i < px.length; i += 4) {
+            const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+            const keep = l >= hi ? 0 : l <= lo ? 1 : (hi - l) / (hi - lo)
+            px[i + 3] = Math.round(px[i + 3] * keep)
+          }
+          ctx.putImageData(id, 0, 0)
+        }
+      }
+    }
+    // trim transparent margins so the set height in mm is the height of the signature itself
+    let x0 = w, y0 = h, x1 = -1, y1 = -1
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    if (x1 < 0) throw new Error('The image looks empty. Use a darker pen or a clearer photo.')
+    const pad = 4; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad)
+    const out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1
+    out.getContext('2d')!.drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height)
+    return out.toDataURL('image/png')
+  } finally { URL.revokeObjectURL(url) }
+}
+
 type Rec = { stop: () => void }
 /** Plain-words reason a microphone could not start. */
 export function micMessage(e: any): string {

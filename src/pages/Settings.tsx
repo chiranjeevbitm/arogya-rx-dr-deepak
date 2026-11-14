@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
 import { api, fileUrl, timings } from '../lib/api'
 import { useMe, useSession } from '../lib/session'
-import { compressImage } from '../lib/media'
+import { prepareArt } from '../lib/media'
 import { fmtDate, timeAgo, istToday, d10 } from '../lib/format'
 import { Modal, Spinner, useAsync, useToast, useDialog, Field, TagInput } from '../components/ui'
 import Icon from '../components/Icon'
@@ -41,12 +41,42 @@ function useSettingsForm() {
 }
 const SaveBar = ({ dirty, save, busy }: { dirty: boolean; save: () => void; busy: boolean }) => dirty ? <div className="savebar"><span className="small muted grow">You have unsaved changes</span><button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button></div> : null
 
-const INKS: [string, string][] = [['#16295f', 'Navy blue'], ['#1d3a8a', 'Ink blue'], ['#1626b8', 'Royal blue'], ['#7a1f2b', 'Maroon'], ['#1f5e46', 'Green'], ['#23262e', 'Black']]
+const INKS: [string, string][] = [
+  ['#16295f', 'Navy blue'], ['#1d3a8a', 'Ink blue'], ['#1626b8', 'Royal blue'], ['#0e5a8a', 'Ocean blue'], ['#3b2a8f', 'Indigo'],
+  ['#5b2a86', 'Purple'], ['#7a1f5c', 'Plum'], ['#7a1f2b', 'Maroon'], ['#a3162b', 'Crimson'], ['#a4401a', 'Rust'],
+  ['#b45309', 'Saffron'], ['#6b4a1f', 'Brown'], ['#1f5e46', 'Green'], ['#2e6b2e', 'Leaf green'], ['#0f6b6b', 'Teal'],
+  ['#3a4a5c', 'Slate'], ['#23262e', 'Black'],
+]
+type Colors = ClinicSettings['letterhead']['colors']
+/** Ready-made looks: one press sets the ink and every section. Each still prints well on an ordinary office printer. */
+const THEMES: { name: string; note: string; ink: string; colors: Colors }[] = [
+  { name: 'Classic navy', note: 'Everything in navy', ink: '#16295f', colors: { header: '', headings: '', hindi: '', signature: '', footer: '' } },
+  { name: 'Royal blue', note: 'Everything in royal blue', ink: '#1626b8', colors: { header: '', headings: '', hindi: '', signature: '', footer: '' } },
+  { name: 'Hospital', note: 'Ocean blue with teal headings', ink: '#0e5a8a', colors: { header: '#0e5a8a', headings: '#0f6b6b', hindi: '#0e5a8a', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Saffron and navy', note: 'Saffron letterhead, navy text', ink: '#16295f', colors: { header: '#b45309', headings: '#b45309', hindi: '#16295f', signature: '#16295f', footer: '#3a4a5c' } },
+  { name: 'Maroon heritage', note: 'Maroon letterhead, black text', ink: '#23262e', colors: { header: '#7a1f2b', headings: '#7a1f2b', hindi: '#16295f', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Crimson', note: 'Red letterhead, black text', ink: '#23262e', colors: { header: '#a3162b', headings: '#a3162b', hindi: '#23262e', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Clinic green', note: 'Green with brown Hindi', ink: '#1f5e46', colors: { header: '#1f5e46', headings: '#2e6b2e', hindi: '#6b4a1f', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Teal modern', note: 'Teal accents, black text', ink: '#23262e', colors: { header: '#0f6b6b', headings: '#0f6b6b', hindi: '#0f6b6b', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Royal purple', note: 'Purple letterhead, indigo Hindi', ink: '#23262e', colors: { header: '#5b2a86', headings: '#5b2a86', hindi: '#3b2a8f', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Earth', note: 'Rust and brown', ink: '#6b4a1f', colors: { header: '#a4401a', headings: '#a4401a', hindi: '#6b4a1f', signature: '#23262e', footer: '#3a4a5c' } },
+  { name: 'Plain black', note: 'For black-and-white printers', ink: '#23262e', colors: { header: '', headings: '', hindi: '', signature: '', footer: '' } },
+]
+const COLOR_KEYS: (keyof Colors)[] = ['header', 'headings', 'hindi', 'signature', 'footer']
+function ThemePicker({ L, set }: { L: ClinicSettings['letterhead']; set: (k: keyof ClinicSettings['letterhead'], v: any) => void }) {
+  const C = L.colors || ({} as Colors)
+  const on = (t: typeof THEMES[number]) => L.ink.toLowerCase() === t.ink && COLOR_KEYS.every(k => (C[k] || '').toLowerCase() === t.colors[k])
+  return <div className="field full"><label>Colour theme</label>
+    <div className="themes">{THEMES.map(t => <button type="button" key={t.name} className="theme" aria-pressed={on(t)} onClick={() => { set('ink', t.ink); set('colors', { ...t.colors }) }}>
+      <span className="dots">{[t.colors.header || t.ink, t.colors.headings || t.ink, t.colors.hindi || t.ink, t.colors.signature || t.ink].map((c, i) => <span key={i} style={{ background: c }} />)}</span>
+      <b>{t.name}</b><small>{t.note}</small></button>)}</div>
+    <span className="small muted">A theme sets the ink and every section at once. Change any of them below afterwards.</span></div>
+}
 function Letterhead() {
   const { s, up, dirty, save, busy, setS } = useSettingsForm(), toast = useToast(), { setSettings } = useSession()
   const L = s.letterhead
   const set = (k: keyof ClinicSettings['letterhead'], v: any) => up(x => ({ ...x, letterhead: { ...x.letterhead, [k]: v } }))
-  const upload = async (kind: 'logo' | 'signature', f?: File) => { if (!f) return; try { const data_url = await compressImage(f, 900); const r = await api<{ file_id: string }>(`/clinic/upload/${kind}`, { body: { data_url } }); const n = { ...s, letterhead: { ...s.letterhead, [kind === 'logo' ? 'logo_file_id' : 'signature_file_id']: r.file_id } }; setS(n); setSettings(n); toast('Uploaded', 'ok') } catch (e: any) { toast(e.message, 'err') } }
+  const upload = async (kind: 'logo' | 'signature', f?: File) => { if (!f) return; try { const data_url = await prepareArt(f, { maxEdge: 900, clearPaper: kind === 'signature' }); const r = await api<{ file_id: string }>(`/clinic/upload/${kind}`, { body: { data_url } }); const n = { ...s, letterhead: { ...s.letterhead, [kind === 'logo' ? 'logo_file_id' : 'signature_file_id']: r.file_id } }; setS(n); setSettings(n); toast('Uploaded', 'ok') } catch (e: any) { toast(e.message, 'err') } }
   const T = (k: keyof ClinicSettings['letterhead'], label: string, full?: boolean) => <div className={'field' + (full ? ' full' : '')}><label htmlFor={'lh-' + k}>{label}</label><input id={'lh-' + k} className="inp" value={String(L[k] ?? '')} onChange={e => set(k, e.target.value)} /></div>
   return <div className="stack">
     <p className="muted">Type your details. Every parchi, the PDF on WhatsApp and the receipts update at once.</p>
@@ -62,7 +92,8 @@ function Letterhead() {
           {T('timings', 'Timings', true)}
           {T('signature_name', 'Name in the signature')}
           <div className="field"><label>Hindi dose lines</label><label className="check"><input type="checkbox" checked={L.print_hindi_doses} onChange={e => set('print_hindi_doses', e.target.checked)} />Print under each medicine</label></div>
-          <div className="field"><label>Ink colour</label><div className="swatches">{INKS.map(k => <button type="button" key={k[0]} className="sw" style={{ background: k[0] }} aria-label={k[1]} title={k[1]} aria-pressed={L.ink === k[0]} onClick={() => set('ink', k[0])} />)}<input type="color" aria-label="Custom colour" value={L.ink} onChange={e => set('ink', e.target.value)} style={{ width: 32, height: 32, padding: 0, border: 0, background: 'none' }} /></div></div>
+          <ThemePicker L={L} set={set} />
+          <div className="field full"><label>Ink colour</label><div className="swatches">{INKS.map(k => <button type="button" key={k[0]} className="sw" style={{ background: k[0] }} aria-label={k[1]} title={k[1]} aria-pressed={L.ink === k[0]} onClick={() => set('ink', k[0])} />)}<input type="color" aria-label="Custom colour" value={L.ink} onChange={e => set('ink', e.target.value)} style={{ width: 32, height: 32, padding: 0, border: 0, background: 'none' }} /></div></div>
           <div className="field"><label>Layout</label><div className="seg"><button type="button" aria-pressed={L.layout === 'center'} onClick={() => set('layout', 'center')}>Centred</button><button type="button" aria-pressed={L.layout === 'left'} onClick={() => set('layout', 'left')}>Logo left</button></div></div>
           <div className="field"><label>Paper</label><div className="seg"><button type="button" aria-pressed={L.paper === 'A5'} onClick={() => set('paper', 'A5')}>A5</button><button type="button" aria-pressed={L.paper === 'A4'} onClick={() => set('paper', 'A4')}>A4</button></div></div>
           <div className="field"><label>Logo (for “Logo left”)</label><div className="row wrap">
@@ -72,7 +103,7 @@ function Letterhead() {
           <div className="field full"><label>Signature image (optional)</label><div className="row wrap">
             <label className="btn sm"><Icon n="edit" />Upload signature<input type="file" accept="image/*" hidden onChange={e => upload('signature', e.target.files?.[0])} /></label>
             {L.signature_file_id && <><img src={fileUrl(L.signature_file_id)} alt="" style={{ height: 32 }} /><button type="button" className="btn sm ghost" onClick={() => set('signature_file_id', null)}>Remove</button></>}
-            <span className="small muted">A photo of the signature on white paper works; it replaces the typed name.</span></div></div>
+            <span className="small muted">A PNG with a transparent background, or a photo of the signature on white paper (the paper is removed). It replaces the typed name.</span></div></div>
           <div className="field"><label htmlFor="lh-sigh">Signature height (mm)</label><input id="lh-sigh" className="inp" inputMode="decimal" value={L.signature_height_mm} onChange={e => set('signature_height_mm', Math.min(30, Math.max(4, parseFloat(e.target.value) || 10)))} /></div>
           <div className="field"><label>Degrees under the signature</label><label className="check"><input type="checkbox" checked={L.show_signature_quals} onChange={e => set('show_signature_quals', e.target.checked)} />Print them</label></div>
           {T('signature_quals', 'Degrees line', true)}
