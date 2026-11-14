@@ -337,10 +337,36 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 .msg.ai a { font-weight: 600 }
 .appt { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line) }
 .appt .av { width: 38px; height: 38px; border-radius: 50%; background: var(--desk-2); display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--ink-deep) }
-.pview { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start }
-.pview > * { min-width: 0 }
-.plist { display: flex; flex-direction: column; gap: 6px; max-height: calc(100vh - 150px); overflow: auto; position: sticky; top: 12px }
-@media (max-width: 900px) { .pview { grid-template-columns: 1fr } .plist { position: static; max-height: 300px } }
+/* Patients: back button, then search and a horizontal strip of patients above the open patient */
+.pat-h { align-items: center }
+.back-btn { gap: 6px; padding-left: 10px }
+.back-btn svg { width: 18px; height: 18px; transition: transform .15s ease }
+.back-btn:hover svg { transform: translateX(-3px) }
+.ptool { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px }
+.ptool-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.psearch { position: relative; flex: 1 1 320px; display: flex; align-items: center; min-width: 0 }
+.psearch > svg { position: absolute; left: 11px; width: 18px; height: 18px; color: var(--muted); pointer-events: none }
+.psearch .inp { padding-left: 36px; padding-right: 36px; width: 100% }
+.psearch .icon-btn { position: absolute; right: 4px }
+.pcount { color: var(--muted); white-space: nowrap } .pcount b { color: var(--text) }
+.ptool-row .inp.sm { width: auto; min-height: 36px; padding: 4px 8px; font-size: 13.5px }
+.pstrip-wrap { position: relative; margin: 0 -4px }
+.pstrip { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 2px 4px 8px; scroll-snap-type: x proximity; scroll-padding: 0 40px; scrollbar-width: thin }
+.pstrip .q-item { flex: 0 0 220px; min-width: 0; max-width: none; scroll-snap-align: start; border-color: var(--line); align-self: stretch }
+.pstrip .q-item.on { border-color: var(--ink) }
+.pstrip .q-more { display: grid; place-items: center; grid-template-columns: 1fr; flex-basis: 150px; font-weight: 600; color: var(--ink); background: var(--ink-soft) }
+.pstrip .empty { padding: 14px }
+.pstrip-wrap.all .pstrip { flex-wrap: wrap; overflow: visible; max-height: none }
+.pstrip-arrow { position: absolute; top: calc(50% - 4px); transform: translateY(-50%); z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--paper); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 24, 64, .14) }
+.pstrip-arrow svg { width: 18px; height: 18px }
+.pstrip-arrow:hover { background: var(--ink); color: #fff; border-color: var(--ink) }
+.pstrip-arrow.l { left: -6px } .pstrip-arrow.r { right: -6px }
+@media (max-width: 900px) {
+  .pstrip .q-item { flex-basis: 200px } .pstrip-arrow { display: none } .pat-h .back-btn span { display: none }
+  .pat-h { gap: 10px } .pat-h .grow { flex: 1 1 calc(100% - 64px); min-width: 0 }
+  .pat-h > .btn:not(.back-btn) { order: 3; flex: 1 1 40%; justify-content: center }
+  .pstrip-wrap.all .pstrip .q-item { flex: 1 1 100% }
+}
 .timeline { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--line); margin-left: 6px }
 .tl { position: relative; padding: 0 0 14px 16px }
 .tl::before { content: ''; position: absolute; left: -7px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink) }
@@ -377,12 +403,24 @@ details.sec[open] > summary::after { transform: rotate(-135deg) }
 @media (max-width: 1280px) { .splitter, .view-seg { display: none } }
 
 /* collapsed sidebar: icons only */
-.rail-toggle { margin-top: 6px; background: none; border: 0; cursor: pointer; width: 100%; text-align: left; font-family: inherit }
+/* floating collapse button on the edge of the left menu: a "<" that keeps nudging so it is easy to spot */
+.rail-fab { position: absolute; top: 22px; right: -16px; z-index: 50; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--paper); background: var(--ink); color: #fff; display: grid; place-items: center; cursor: pointer; padding: 0;
+  box-shadow: 0 4px 14px rgba(16, 24, 64, .28); transition: transform .2s ease, box-shadow .2s ease }
+.rail-fab::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--ink); opacity: 0; animation: rail-ring 3.2s ease-out infinite; pointer-events: none }
+.rail-fab:hover { transform: scale(1.12); box-shadow: 0 6px 18px rgba(16, 24, 64, .36) }
+.rail-fab:focus-visible { outline: 3px solid var(--ink-soft); outline-offset: 2px }
+.rail-fab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .3s ease; overflow: visible }
+.rail-fab .main { animation: rail-nudge 1.6s ease-in-out infinite }
+.rail-fab .ghost { opacity: 0; animation: rail-trail 1.6s ease-in-out infinite }
+.shell.slim .rail-fab { right: -20px; top: 24px }
+.shell.slim .rail-fab svg { transform: scaleX(-1) }
+@keyframes rail-nudge { 0%, 100% { transform: translateX(0) } 50% { transform: translateX(-2.5px) } }
+@keyframes rail-trail { 0% { opacity: 0; transform: translateX(3px) } 45% { opacity: .55 } 100% { opacity: 0; transform: translateX(-4px) } }
+@keyframes rail-ring { 0% { opacity: .55; transform: scale(1) } 70%, 100% { opacity: 0; transform: scale(1.6) } }
 .shell.slim .rail { padding: 14px 8px; align-items: center }
 .shell.slim .rail .lbl { display: none }
 .shell.slim .brand { padding: 4px 0 14px }
 .shell.slim .nav-a { justify-content: center; padding: 10px; width: 44px }
-.shell.slim .rail-toggle svg { transform: scaleX(-1) }
 .shell.slim .rail-foot { flex-direction: column; gap: 8px }
 @media (max-width: 900px) { .shell.slim { --rail-w: 0px } }
 

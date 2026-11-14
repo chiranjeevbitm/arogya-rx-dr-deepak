@@ -80,7 +80,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     <aside className="rail no-print">
       <Link to="/" className="brand" title="Home"><span className="brand-mark">℞</span><span className="lbl"><b>{L.clinic_name_hi}</b><small>Arogya Rx</small></span></Link>
       {nav.map(x => <NavLink key={x.to} to={x.to} className={({ isActive }) => 'nav-a' + (isActive ? ' active' : '')} title={slim ? x.label : undefined} aria-label={x.label}><Icon n={x.n} /><span className="lbl">{x.label}</span></NavLink>)}
-      <button type="button" className="nav-a rail-toggle" onClick={toggle} title={slim ? 'Expand menu' : 'Collapse menu'} aria-label={slim ? 'Expand menu' : 'Collapse menu'} aria-pressed={slim}><Icon n="sidebar" /><span className="lbl">Collapse menu</span></button>
+      <button type="button" className="rail-fab" onClick={toggle} title={slim ? 'Expand menu' : 'Collapse menu'} aria-label={slim ? 'Expand menu' : 'Collapse menu'} aria-pressed={slim}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path className="ghost" d="M16 6.5 10.5 12l5.5 5.5" /><path className="main" d="M14 6.5 8.5 12l5.5 5.5" /></svg>
+      </button>
       <div className="rail-foot">
         <span className="avatar">{me.user.name.replace(/^Dr\.?\s*/i, '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
         <span className="grow lbl"><b className="ellipsis" style={{ display: 'block' }}>{me.user.name}</b><span className="tiny muted">{me.user.role === 'doctor' ? 'Doctor' : me.user.role === 'reception' ? 'Reception' : 'Admin'}</span></span>
