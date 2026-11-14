@@ -8,6 +8,8 @@ import { putFile } from '../lib/storage.js'
 import { mergeSettings } from '../../shared/settings.js'
 import { istToday, addDaysISO, safetyChecks } from '../../shared/rx.js'
 import { normTest, patientDetail } from './patients.js'
+import { unchangedDraftIds } from '../../shared/drafts.js'
+import { rxRowsFor } from '../lib/drafts.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())
@@ -54,6 +56,13 @@ r.post('/', requireAuth('doctor', 'admin'), async c => {
   const u = me(c)
   const [p] = await sql()`select id from arx.patients where id = ${b.patient_id} and clinic_id = ${u.clinic_id} and archived_at is null`
   if (!p) throw new HttpError(404, 'Patient not found.')
+  // Pressing "Open in OPD" again for the same patient reopens today's empty draft instead of making one more
+  if (!b.copy_from) {
+    const rows = await rxRowsFor(sql(), [b.patient_id])
+    const same = unchangedDraftIds(rows), today = istToday()
+    const reuse = rows.filter(r => same.has(r.id) && !r.visit_id && r.rx_date === today)
+    if (reuse.length) return c.json({ rx_id: reuse[0].id })
+  }
   let data: any = { complaints: '', vitals: {}, exam: {}, systemic: {}, comorbid: {}, comorbid_details: {}, addiction: {}, investigations: [], advice: [], diagnosis: '', follow_up: { days: null, note: '' }, hindi: true }
   let meds: any[] = []
   if (b.copy_from) {

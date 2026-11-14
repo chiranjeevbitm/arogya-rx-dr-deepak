@@ -394,4 +394,13 @@ create index if not exists patients_active_idx on arx.patients (clinic_id, updat
 create index if not exists patients_archived_idx on arx.patients (clinic_id, archived_at desc) where archived_at is not null;
 `,
   },
+  {
+    version: 9,
+    name: 'prune_unchanged_drafts',
+    // Marker only: when this is first applied, ensureSchema() deletes every draft prescription that has nothing new in it
+    // (server/lib/drafts.ts). After that the daily job keeps them from piling up again.
+    sql: /* sql */ `
+create index if not exists rx_drafts_idx on arx.prescriptions (clinic_id, updated_at) where status = 'draft';
+`,
+  },
 ]

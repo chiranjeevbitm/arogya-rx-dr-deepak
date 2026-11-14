@@ -8,6 +8,7 @@ import { sendCampaign, waApiConfigured, waLink } from '../lib/whatsapp.js'
 import { rxBundle, publicRxUrl } from './rx.js'
 import { displayName, sigHi, fmtDateHi, addDaysISO, istToday, adviceHi, normPhone, fmtDate } from '../../shared/rx.js'
 import { mergeSettings } from '../../shared/settings.js'
+import { pruneUnchangedDrafts } from '../lib/drafts.js'
 
 const r = new Hono<Env>()
 
@@ -89,7 +90,10 @@ r.post('/reminders', requireAuth('doctor', 'admin'), async c => { const out = aw
 r.get('/reminders', async c => {
   const secret = process.env.CRON_SECRET
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized')
-  return c.json(await runReminders())
+  const out = await runReminders()
+  // the same daily run clears drafts that were opened and left with nothing written in them
+  const drafts = await pruneUnchangedDrafts(sql()).catch(e => ({ removed: 0, error: String(e?.message || e) }))
+  return c.json({ ...out, drafts })
 })
 
 export default r

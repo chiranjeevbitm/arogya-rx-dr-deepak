@@ -1,5 +1,6 @@
 import postgres from 'postgres'
 import { MIGRATIONS } from './migrations.js'
+import { pruneUnchangedDrafts } from './lib/drafts.js'
 
 let _sql: postgres.Sql | null = null
 let lastUse = Date.now()
@@ -86,6 +87,7 @@ async function migrate() {
   // fast path (almost every cold start): the newest migration is already applied, so skip the locked transaction
   let upToDate = false
   try { upToDate = (await db`select 1 from arx.schema_migrations where version = ${MIGRATIONS[MIGRATIONS.length - 1].version}`).length > 0 } catch (e: any) { if (e?.code !== '42P01' && e?.code !== '3F000') throw e /* only a missing table means first run */ }
+  const applied: number[] = []
   if (!upToDate) await db.begin(async tx => {
     await tx`select pg_advisory_xact_lock(727274)`
     await tx`create schema if not exists arx`
@@ -95,9 +97,16 @@ async function migrate() {
       if (done.has(m.version)) continue
       await tx.unsafe(m.sql)
       await tx`insert into arx.schema_migrations (version, name) values (${m.version}, ${m.name})`
+      applied.push(m.version)
       console.log(`[db] applied migration ${m.version} ${m.name}`)
     }
   })
+  // Migration 9 marks the one-time clear-out of the drafts that were left behind with nothing written in them.
+  // It runs outside the migration transaction, so a failure here can never block the app from starting.
+  if (applied.includes(9)) {
+    try { const r = await pruneUnchangedDrafts(db, { idleMinutes: 30 }); console.log(`[db] removed ${r.removed} unchanged drafts`) }
+    catch (e) { console.error('[db] draft clean-up failed (the daily job retries it)', e) }
+  }
   // Session-signing key: SESSION_SECRET if set, otherwise generated once and kept in the database.
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
     let [r] = await db`select value from arx.app_secrets where name = 'session'`

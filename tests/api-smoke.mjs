@@ -204,5 +204,21 @@ r = await call('GET', '/api/clinic/audit', null, 'doctor'); ok(r.j.some(a => a.a
   r = await call('POST', '/api/rx', { patient_id: pid }, 'doctor'); ok(r.status === 200, 'prescriptions work again after putting the patient back', r)
 }
 
+{ // drafts: a draft is listed on the patient page only when something was written in it
+  const pid = (await call('POST', '/api/patients', { name: 'Draft Check', sex: 'M', age_years: 50 }, 'doctor')).j.id
+  const a = (await call('POST', '/api/rx', { patient_id: pid }, 'doctor')).j.rx_id
+  r = await call('POST', '/api/rx', { patient_id: pid }, 'doctor'); ok(r.j.rx_id === a, 'Open in OPD twice reuses the same empty draft', r.j)
+  r = await call('GET', `/api/patients/${pid}`, null, 'doctor'); ok(r.j.prescriptions.length === 0, 'empty draft not listed', r.j.prescriptions)
+  const data = { complaints: 'Fever', vitals: { bp: '130/80' }, diagnosis: 'Viral fever', hindi: true }, meds = [{ name: 'Dolo 650', freq: '1-1-1', days: 3 }]
+  await call('POST', `/api/rx/${a}/finalize`, { data, meds, book_follow_up: false }, 'doctor')
+  const c1 = (await call('POST', '/api/rx', { patient_id: pid, copy_from: a }, 'doctor')).j.rx_id
+  const c2 = (await call('POST', '/api/rx', { patient_id: pid, copy_from: a }, 'doctor')).j.rx_id
+  await call('PUT', `/api/rx/${c2}`, { data: { ...data, vitals: {}, diagnosis: 'Viral fever, better' }, meds }, 'doctor')
+  r = await call('GET', `/api/patients/${pid}`, null, 'doctor')
+  ok(r.j.prescriptions.length === 2 && r.j.prescriptions.some(x => x.id === c2) && !r.j.prescriptions.some(x => x.id === c1) && !('data' in r.j.prescriptions[0]), 'untouched copy hidden, changed draft and final listed', r.j.prescriptions)
+  await call('POST', `/api/rx/${a}/reopen`, null, 'doctor')
+  r = await call('GET', `/api/patients/${pid}`, null, 'doctor'); ok(r.j.prescriptions.some(x => x.id === a), 'a reopened prescription is always listed', r.j.prescriptions)
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

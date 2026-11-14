@@ -7,6 +7,7 @@ import { audit } from '../lib/audit.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { mergeSettings } from '../../shared/settings.js'
 import { normPhone, istToday } from '../../shared/rx.js'
+import { unchangedDraftIds } from '../../shared/drafts.js'
 
 const r = new Hono<Env>()
 r.use('*', requireAuth())
@@ -93,15 +94,21 @@ export async function patientDetail(cid: string, id: string, light = false) {
   const [[p], visits, rxs, docs, labs, bills, appts] = await sql().begin(db => Promise.all([
     db`select p.*, u.name as archived_by_name from arx.patients p left join arx.users u on u.id = p.archived_by where p.id = ${id} and p.clinic_id = ${cid}`,
     light ? none : db`select id, visit_date, token, status, visit_type, complaint, source, vitals from arx.visits where patient_id = ${id} and clinic_id = ${cid} and status <> 'cancelled' order by visit_date desc, token desc limit 200`,
-    db`select id, rx_date, status, data->>'diagnosis' as diagnosis, data->>'complaints' as complaints, data->'vitals' as vitals, jsonb_array_length(meds) as med_count, meds, legacy_id is not null as imported
-       from arx.prescriptions where patient_id = ${id} and clinic_id = ${cid} order by rx_date desc, created_at desc limit ${light ? 40 : 200}`,
+    // `data` and the visit's complaint/vitals are only read here to tell unchanged drafts apart; they are not sent on
+    db`select x.id, x.rx_date, x.status, x.data->>'diagnosis' as diagnosis, x.data->>'complaints' as complaints, x.data->'vitals' as vitals, jsonb_array_length(x.meds) as med_count, x.meds, x.legacy_id is not null as imported,
+         x.data, x.finalized_at, x.created_at, v.complaint as visit_complaint, v.vitals as visit_vitals
+       from arx.prescriptions x left join arx.visits v on v.id = x.visit_id
+       where x.patient_id = ${id} and x.clinic_id = ${cid} order by x.rx_date desc, x.created_at desc limit ${light ? 40 : 200}`,
     light ? none : db`select id, kind, doc_date, extracted, file_id, created_at from arx.documents where patient_id = ${id} and clinic_id = ${cid} order by created_at desc`,
     db`select id, test, value_num::float as value_num, value_text, unit, flag, result_date, source from arx.lab_results where patient_id = ${id} and clinic_id = ${cid} order by result_date`,
     db`select id, bill_no, total::float, paid::float, mode, status, bill_date from arx.bills where patient_id = ${id} and clinic_id = ${cid} order by created_at desc limit 50`,
     light ? none : db`select id, appt_date, appt_time, status, reason, source from arx.appointments where patient_id = ${id} and clinic_id = ${cid} and appt_date >= ${istToday()} order by appt_date`,
   ]))
   if (!p) throw new HttpError(404, 'Patient not found.')
-  return { patient: p, visits, prescriptions: rxs, documents: docs, labs, bills, upcoming: appts }
+  // a draft is shown only when something was written in it; untouched drafts (shared/drafts.ts) are left out
+  const same = unchangedDraftIds(rxs as any)
+  const prescriptions = rxs.filter((r: any) => !same.has(r.id)).map(({ data, finalized_at, created_at, visit_complaint, visit_vitals, ...r }: any) => r)
+  return { patient: p, visits, prescriptions, documents: docs, labs, bills, upcoming: appts }
 }
 
 r.get('/:id', async c => c.json(await patientDetail(me(c).clinic_id, P(c, 'id'))))
