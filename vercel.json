@@ -18,7 +18,11 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api/|seed/|assets/|favicon|manifest|sw\\.js|icons/).*)",
+      "source": "/book/arogya-clinic",
+      "destination": "/book-arogya-clinic.html"
+    },
+    {
+      "source": "/((?!api/|seed/|assets/|favicon|manifest|sw\\.js|icons/|robots\\.txt|sitemap\\.xml|llms\\.txt).*)",
       "destination": "/index.html"
     }
   ],
@@ -63,6 +67,15 @@
         {
           "key": "Cache-Control",
           "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/llms.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/markdown; charset=utf-8"
         }
       ]
     }

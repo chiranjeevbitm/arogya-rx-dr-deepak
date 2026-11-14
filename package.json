@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n api,web \"tsx watch server/local.ts\" \"vite\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/prerender-book.mjs",
     "start": "tsx server/local.ts",
     "typecheck": "tsc -b",
     "test": "vitest run",

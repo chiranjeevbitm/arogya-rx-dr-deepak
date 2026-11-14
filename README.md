@@ -44,3 +44,10 @@ npm run build && npm start   # http://localhost:8787, then open /setup
 node tests/api-smoke.mjs     # 56 end-to-end API checks against a fresh database
 ```
 The medicine list (`public/seed`) is built from the old app's catalogue with `npm run seed:build`: 9,924 unique medicines (2,459 Jan Aushadhi with prices, 7,465 brands).
+
+## Search and AI visibility
+The app is private (`noindex`, and `robots.txt` disallows everything except the booking page). The public page `/book/arogya-clinic`
+is pre-rendered at build time by `scripts/prerender-book.mjs`: clinic facts, booking questions (English and Hindi) and JSON-LD are written
+into `dist/book-arogya-clinic.html`, so crawlers that don't run JavaScript can read them. The same script writes `robots.txt`,
+`sitemap.xml` and `llms.txt`. The clinic's public name, address, phone and hours live in `scripts/seo-clinic.mjs` and must match the
+profile site (`Doctors-Profile/FE/src/lib/site.js`) and the Google Business Profile exactly.

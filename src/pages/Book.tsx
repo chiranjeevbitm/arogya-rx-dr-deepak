@@ -13,7 +13,7 @@ export default function Book() {
   const [day, setDay] = useState(''), [slots, setSlots] = useState<Slot[] | null>(null), [closed, setClosed] = useState(false), [time, setTime] = useState('')
   const [f, setF] = useState({ name: '', phone: '', age_years: '', sex: '' as '' | 'M' | 'F' | 'O', reason: '', website: '' })
   const [busy, setBusy] = useState(false), [done, setDone] = useState<any>(null), [formErr, setFormErr] = useState('')
-  useEffect(() => { api<Info>(`/public/clinic/${slug}`).then(i => { setInfo(i); setDay(i.today); document.title = `Book: ${i.doctor}` }).catch(e => setErr(e.message)) }, [slug])
+  useEffect(() => { api<Info>(`/public/clinic/${slug}`).then(i => { setInfo(i); setDay(i.today); document.title = `Book ${i.doctor} online — ${i.name}, Muzaffarpur` }).catch(e => setErr(e.message)) }, [slug])
   useEffect(() => { if (!day) return; setSlots(null); setTime(''); api<{ closed: boolean; slots: Slot[] }>(`/public/clinic/${slug}/slots?date=${day}`).then(r => { setSlots(r.slots); setClosed(r.closed) }).catch(e => setFormErr(e.message)) }, [day, slug])
   if (err) return <div className="center-page"><div className="auth-card"><b>Booking page not found</b><p className="muted">{err}</p></div></div>
   if (!info) return <div className="center-page muted">Loading…</div>
