@@ -86,7 +86,7 @@ export default function Parchi({ s, patient, data, meds, date, draft, token }: {
           {L.show_signature_quals && L.signature_quals ? <div className="q">{L.signature_quals}</div> : null}
           {L.dsc_note ? <div className="dsc">{L.dsc_note}</div> : null}</div>
       </div>
-      <div className="pfoot"><span>Generic names as per NMC guidance · Valid for {L.validity_days} days</span><span>Made with Arogya Rx</span></div>
+      <div className="pfoot"><span className="pfoot-l"><span>Generic names as per NMC guidance · Valid for {L.validity_days} days</span><span>NOT VALID FOR MEDICOLEGAL PURPOSES</span><span>Emergency facilities not available</span></span><span>Made with Arogya Rx</span></div>
     </div>
   )
 }
